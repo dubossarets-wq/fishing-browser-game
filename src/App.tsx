@@ -40,7 +40,7 @@ function App() {
         <RightPanel />
       </div>
 
-      <div className="min-w-0">
+      <div className="min-w-0 flex flex-col justify-end">
         <RodDock />
       </div>
 
