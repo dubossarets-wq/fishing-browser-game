@@ -965,7 +965,7 @@ function drawRod(
   } else if (rod.state === 'fight' || rod.state === 'hooked') {
     floatVisible = false
   } else {
-    floatY += Math.sin(bobPhase * 0.8) * 1
+    floatY += 7 + Math.sin(bobPhase * 0.8) * 1
   }
 
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'
