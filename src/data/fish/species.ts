@@ -94,7 +94,12 @@ const DATA_B64 = [
   'MC42fSwiZ3JvdW5kYmFpdEFmZmluaXR5Ijo5NSwiZ3JvdW5kYmFpdEFwcHJvYWNoU3BlZWQiOjE1LCJpbmRpcmVjdFByZXlSZXNwb25zZSI6MCwidHJvcGh5Q2F1dGlvbk11bHRpcGxpZXIiOjJ9fV0=',
 ].join('')
 
-export const FISH_SPECIES: FishSpecies[] = JSON.parse(atob(DATA_B64))
+function decodeUtf8Base64(b64: string): string {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+export const FISH_SPECIES: FishSpecies[] = JSON.parse(decodeUtf8Base64(DATA_B64))
 
 export function getFishSpeciesById(id: string): FishSpecies | undefined {
   return FISH_SPECIES.find((f) => f.id === id)
