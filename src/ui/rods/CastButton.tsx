@@ -9,10 +9,12 @@ export function CastButton() {
   const setFightInput = useGameStore((s) => s.setFightInput)
   const keepFish = useGameStore((s) => s.keepFish)
   const releaseFish = useGameStore((s) => s.releaseFish)
+  const reelInEmpty = useGameStore((s) => s.reelInEmpty)
 
   const isBiting = rod.state === 'waiting' && rod.biteStage === 'strong-bite'
+  const isWaiting = (rod.state === 'waiting' || rod.state === 'bite') && !isBiting
 
-  if (rod.state !== 'ready' && !isBiting && rod.state !== 'caught') return null
+  if (rod.state !== 'ready' && !isBiting && !isWaiting && rod.state !== 'caught') return null
 
   if (rod.state === 'caught') {
     return (
@@ -47,6 +49,16 @@ export function CastButton() {
         >
           ПОДСЕЧКА!
         </button>
+      </div>
+    )
+  }
+
+  if (isWaiting) {
+    return (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
+        <Button variant="ghost" className="px-8 py-2.5 text-base shadow-xl" onClick={() => reelInEmpty(activeRodIndex)}>
+          Смотать
+        </Button>
       </div>
     )
   }

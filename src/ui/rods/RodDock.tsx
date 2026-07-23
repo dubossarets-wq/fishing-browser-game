@@ -49,7 +49,6 @@ export function RodDock() {
   const rod = useGameStore((s) => s.rods[activeRodIndex])
   const currentLocationId = useGameStore((s) => s.currentLocationId)
   const setCastParams = useGameStore((s) => s.setCastParams)
-  const reelInEmpty = useGameStore((s) => s.reelInEmpty)
   const finishSetup = useGameStore((s) => s.finishSetup)
   const acknowledgeBroken = useGameStore((s) => s.acknowledgeBroken)
   const openSetup = useUiStore((s) => s.openSetup)
@@ -141,9 +140,6 @@ export function RodDock() {
         )}
         {rod.state === 'ready' && (
           <Button variant="ghost" onClick={() => openSetup(activeRodIndex)}>Снасть</Button>
-        )}
-        {(rod.state === 'waiting' || rod.state === 'bite') && rod.biteStage !== 'strong-bite' && (
-          <Button variant="ghost" onClick={() => reelInEmpty(activeRodIndex)}>Смотать</Button>
         )}
         {rod.state === 'broken' && (
           <Button variant="ghost" onClick={() => acknowledgeBroken(activeRodIndex)}>Ок</Button>
