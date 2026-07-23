@@ -23,29 +23,29 @@ function App() {
   const modal = useUiStore((s) => s.modal)
 
   return (
-    <div className="h-screen w-screen grid grid-rows-[auto_1fr_auto] grid-cols-[1fr_300px] overflow-hidden">
-      <div className="col-span-2">
-        <TopBar />
-      </div>
+    <div className="h-screen w-screen flex flex-col overflow-hidden">
+      <TopBar />
 
-      <div className="relative isolate min-h-0 bg-black">
-        <SceneBackdrop />
-        <FishingCanvas />
-        <FightOverlay />
-        <CastButton />
-        <DevOverlay />
-      </div>
+      <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="relative isolate flex-1 min-h-0 bg-black">
+            <SceneBackdrop />
+            <FishingCanvas />
+            <FightOverlay />
+            <CastButton />
+            <DevOverlay />
+          </div>
+          <RodDock />
+        </div>
 
-      <div className="min-h-0">
-        <RightPanel />
-      </div>
-
-      <div className="min-w-0 flex flex-col justify-end">
-        <RodDock />
-      </div>
-
-      <div className="min-h-0 h-48">
-        <SocialPanel />
+        <div className="w-[300px] shrink-0 flex flex-col">
+          <div className="flex-1 min-h-0">
+            <RightPanel />
+          </div>
+          <div className="h-48 shrink-0">
+            <SocialPanel />
+          </div>
+        </div>
       </div>
 
       {modal === 'setup' && <RodSetupModal />}
