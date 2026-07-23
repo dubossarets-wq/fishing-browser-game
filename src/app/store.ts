@@ -131,6 +131,7 @@ interface GameState {
   saveNow: () => Promise<void>
 
   setActiveRod: (index: 0 | 1 | 2) => void
+  setPlayerName: (name: string) => void
   equipToRod: (rodIndex: 0 | 1 | 2, slotKey: keyof RodLoadout, stackId: string | null) => void
   setBaitOnRod: (rodIndex: 0 | 1 | 2, baitId: string | null) => void
   setBaitSandwich: (rodIndex: 0 | 1 | 2, baitId: string | null) => void
@@ -335,6 +336,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setActiveRod: (index) => set({ activeRodIndex: index }),
+
+  setPlayerName: (name) => {
+    const state = get()
+    if (!name || name === state.player.name) return
+    set({ player: { ...state.player, name } })
+  },
 
   equipToRod: (rodIndex, slotKey, stackId) => {
     const state = get()

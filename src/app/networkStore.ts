@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '@/engine/network/supabaseClient'
+import { useGameStore } from '@/app/store'
 import { signIn, signUp, signOut, getSession, onAuthStateChange, fetchProfile, upsertProfileStats, fetchLeaderboard, resendConfirmation } from '@/engine/network/authService'
 import { fetchRecentMessages, sendChatMessageRemote, subscribeToChat } from '@/engine/network/chatService'
 import { joinPresence, type PresenceInfo } from '@/engine/network/presenceService'
@@ -47,6 +48,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     const session = await getSession()
     if (session) {
       const profile = await fetchProfile(session.user.id)
+      if (profile?.username) useGameStore.getState().setPlayerName(profile.username)
       set({ session, profile, status: 'online' })
       connectRealtime(session.user.id, profile?.username ?? 'Рыболов', profile?.level ?? 1, set)
     } else {
@@ -55,6 +57,7 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     onAuthStateChange(async (nextSession) => {
       if (nextSession) {
         const profile = await fetchProfile(nextSession.user.id)
+        if (profile?.username) useGameStore.getState().setPlayerName(profile.username)
         set({ session: nextSession, profile, status: 'online', authError: null })
         connectRealtime(nextSession.user.id, profile?.username ?? 'Рыболов', profile?.level ?? 1, set)
       } else {
