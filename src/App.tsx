@@ -28,7 +28,7 @@ function App() {
         <TopBar />
       </div>
 
-      <div className="relative min-h-0 bg-black">
+      <div className="relative isolate min-h-0 bg-black">
         <SceneBackdrop />
         <FishingCanvas />
         <FightOverlay />

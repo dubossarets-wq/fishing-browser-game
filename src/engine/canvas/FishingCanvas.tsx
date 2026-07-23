@@ -235,9 +235,9 @@ export function FishingCanvas() {
 
       if (photoScene) {
         // A real photo backdrop (SceneBackdrop.tsx) sits behind the canvas for
-        // this location — leave the sky/water region transparent instead of
-        // painting the procedural gradient over it.
-        ctx.clearRect(0, 0, W, bankTop)
+        // this location, covering the full frame — leave the whole canvas
+        // transparent instead of painting the procedural gradients/bank over it.
+        ctx.clearRect(0, 0, W, H)
       } else {
         // Sky
         const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY)
@@ -285,7 +285,7 @@ export function FishingCanvas() {
         ctx.fillRect(0, horizonY, W, bankTop - horizonY)
       }
 
-      drawRipples(ctx, W, horizonY, bankTop, t)
+      if (!photoScene) drawRipples(ctx, W, horizonY, bankTop, t)
 
       // Fog overlay
       if (store.weather.kind === 'fog') {
@@ -303,14 +303,16 @@ export function FishingCanvas() {
         ctx.fillRect(0, 0, W, bankTop)
       }
 
-      // Bank / foreground
-      const bankGrad = ctx.createLinearGradient(0, bankTop, 0, bankBottom)
-      bankGrad.addColorStop(0, loc.bankColor)
-      bankGrad.addColorStop(1, '#181008')
-      ctx.fillStyle = bankGrad
-      ctx.fillRect(0, bankTop, W, bankBottom - bankTop)
-      ctx.fillStyle = 'rgba(0,0,0,0.25)'
-      ctx.fillRect(0, bankTop, W, 3)
+      // Bank / foreground (photo locations show their own water/shore all the way down)
+      if (!photoScene) {
+        const bankGrad = ctx.createLinearGradient(0, bankTop, 0, bankBottom)
+        bankGrad.addColorStop(0, loc.bankColor)
+        bankGrad.addColorStop(1, '#181008')
+        ctx.fillStyle = bankGrad
+        ctx.fillRect(0, bankTop, W, bankBottom - bankTop)
+        ctx.fillStyle = 'rgba(0,0,0,0.25)'
+        ctx.fillRect(0, bankTop, W, 3)
+      }
 
       // Rods
       store.rods.forEach((rod, i) => {
