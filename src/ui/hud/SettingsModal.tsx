@@ -4,6 +4,7 @@ import { useGameStore } from '@/app/store'
 import { useNetworkStore } from '@/app/networkStore'
 import { soundManager } from '@/engine/audio/soundManager'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 
 export function SettingsModal() {
   const closeModal = useUiStore((s) => s.closeModal)
@@ -44,8 +45,10 @@ export function SettingsModal() {
     setNickBusy(false)
   }
 
+  const backdrop = useBackdropClose(closeModal)
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-sm p-5" >
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">

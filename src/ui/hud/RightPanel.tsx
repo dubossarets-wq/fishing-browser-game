@@ -1,16 +1,50 @@
-import { useMemo } from 'react'
-import { useGameStore } from '@/app/store'
+import { useMemo, useRef } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
+import { useGameStore, formatGameClock, gameWeekday } from '@/app/store'
 import { useUiStore } from '@/app/uiStore'
 import { getLocationById } from '@/data/locations/locations'
 import { sampleDepthAt } from '@/game/locations/types'
 import { getQuestById } from '@/data/quests/quests'
 import { Button, Panel } from '@/ui/common/Panel'
+import type { WeatherKind } from '@/game/fish/types'
 
 const BOTTOM_LABELS: Record<string, string> = {
   sand: 'песок', silt: 'ил', rocks: 'камни', grass: 'трава', shell: 'ракушка', snags: 'коряги',
 }
 
+const WEATHER_ICONS: Record<WeatherKind, string> = { clear: '☀️', cloudy: '☁️', rain: '🌧️', fog: '🌫️' }
+const WEATHER_LABELS: Record<WeatherKind, string> = { clear: 'Ясно', cloudy: 'Облачно', rain: 'Дождь', fog: 'Туман' }
+
+function WeatherStatus() {
+  const weather = useGameStore((s) => s.weather)
+  const clock = useGameStore((s) => s.clock)
+
+  return (
+    <Panel paper className="p-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xl leading-none">{WEATHER_ICONS[weather.kind]}</span>
+          <div>
+            <div className="text-sm font-semibold">{WEATHER_LABELS[weather.kind]}</div>
+            <div className="text-[11px] opacity-70">{Math.round(weather.temperature)}°C · ветер {weather.windSpeed.toFixed(1)} м/с</div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-sm font-mono font-semibold">{formatGameClock(clock)}</div>
+          <div className="text-[11px] opacity-70">{gameWeekday(clock)}</div>
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
 function DepthChart({ locationId, activeDistance }: { locationId: string; activeDistance: number }) {
+  const activeRodIndex = useGameStore((s) => s.activeRodIndex)
+  const rodState = useGameStore((s) => s.rods[activeRodIndex].state)
+  const rodAngle = useGameStore((s) => s.rods[activeRodIndex].castAngle)
+  const setCastParams = useGameStore((s) => s.setCastParams)
+  const svgRef = useRef<SVGSVGElement>(null)
+
   const loc = getLocationById(locationId)
   if (!loc) return null
   const W = 240
@@ -28,9 +62,35 @@ function DepthChart({ locationId, activeDistance }: { locationId: string; active
   const currentPoint = sampleDepthAt(loc, activeDistance)
   const markerY = (currentPoint.depth / maxDepth) * H
 
+  const aimable = rodState === 'idle' || rodState === 'setup' || rodState === 'ready'
+
+  const updateFromPointer = (clientX: number) => {
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const frac = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
+    const distance = Math.round(frac * maxDist * 100) / 100
+    setCastParams(activeRodIndex, distance, rodAngle)
+  }
+
+  const onPointerDown = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (!aimable) return
+    updateFromPointer(e.clientX)
+  }
+  const onPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
+    if (!aimable || e.buttons !== 1) return
+    updateFromPointer(e.clientX)
+  }
+
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-20 bg-black/25 rounded-sm">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        className={`w-full h-20 bg-black/25 rounded-sm ${aimable ? 'cursor-ew-resize' : ''}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+      >
         <polygon points={`0,0 ${points} ${W},0`} fill="rgba(79,143,166,0.25)" />
         <polyline points={points} fill="none" stroke="#7fb8cc" strokeWidth={1.5} />
         <line x1={markerX} y1={0} x2={markerX} y2={H} stroke="#e8443a" strokeWidth={1} strokeDasharray="3,2" />
@@ -98,6 +158,8 @@ export function RightPanel() {
 
   return (
     <div className="panel-wood flex flex-col gap-3 p-3 overflow-y-auto text-paper-100">
+      <WeatherStatus />
+
       <div>
         <div className="text-xs uppercase tracking-wide text-paper-300 mb-1">Профиль глубины</div>
         <DepthChart locationId={currentLocationId} activeDistance={rod.castDistance} />

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { useNetworkStore } from '@/app/networkStore'
 import { useUiStore } from '@/app/uiStore'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 
 export function AuthModal() {
   const closeModal = useUiStore((s) => s.closeModal)
+  const backdrop = useBackdropClose(closeModal)
   const status = useNetworkStore((s) => s.status)
   const authError = useNetworkStore((s) => s.authError)
   const register = useNetworkStore((s) => s.register)
@@ -27,7 +29,7 @@ export function AuthModal() {
 
   if (status === 'unconfigured') {
     return (
-      <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+      <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
         <Panel paper className="w-full max-w-sm p-5" >
           <div onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
@@ -73,7 +75,7 @@ export function AuthModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-sm p-5" >
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">

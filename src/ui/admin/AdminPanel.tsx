@@ -3,6 +3,7 @@ import { useGameStore } from '@/app/store'
 import { useUiStore } from '@/app/uiStore'
 import { FISH_SPECIES } from '@/data/fish/species'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 import type { WeatherKind } from '@/game/fish/types'
 
 const WEATHER_OPTIONS: WeatherKind[] = ['clear', 'cloudy', 'rain', 'fog']
@@ -36,10 +37,12 @@ export function AdminPanel() {
   const [tempInput, setTempInput] = useState(String(Math.round(weather.temperature)))
   const [forceSpecies, setForceSpecies] = useState(FISH_SPECIES[0].id)
 
+  const backdrop = useBackdropClose(closeModal)
+
   if (!admin.isAdmin) return null
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-2xl p-5 max-h-[85vh] overflow-y-auto">
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">

@@ -205,6 +205,20 @@ export function FishingCanvas() {
       return bestDist < 18 ? bestIndex : -1
     }
 
+    // Held-drag aiming: mousedown on open water starts it, moving while still
+    // held keeps re-aiming, releasing (anywhere, even off-canvas) stops it —
+    // same window-level release pattern used for the strike/reel holds.
+    let isAiming = false
+
+    const aimAt = (clientX: number, clientY: number) => {
+      const store = useGameStore.getState()
+      const active = store.activeRodIndex
+      const activeRod = store.rods[active]
+      if (activeRod.state !== 'idle' && activeRod.state !== 'setup' && activeRod.state !== 'ready') return
+      const { distance, angle } = waterTargetAt(clientX, clientY)
+      store.setCastParams(active, distance, angle)
+    }
+
     const handlePointerDown = (e: PointerEvent) => {
       const rodIndex = rodPoleAt(e.clientX, e.clientY)
       const store = useGameStore.getState()
@@ -230,13 +244,13 @@ export function FishingCanvas() {
         return
       }
 
-      // Not on a rod or float — a single click just aims the active rod at the clicked water spot.
-      const active = store.activeRodIndex
-      const activeRod = store.rods[active]
-      if (activeRod.state !== 'idle' && activeRod.state !== 'setup' && activeRod.state !== 'ready') return
+      // Not on a rod or float — start aiming the active rod at the water.
+      isAiming = true
+      aimAt(e.clientX, e.clientY)
+    }
 
-      const { distance, angle } = waterTargetAt(e.clientX, e.clientY)
-      store.setCastParams(active, distance, angle)
+    const handlePointerUp = () => {
+      isAiming = false
     }
 
     const handleDoubleClick = (e: MouseEvent) => {
@@ -255,10 +269,12 @@ export function FishingCanvas() {
 
     const handlePointerMove = (e: PointerEvent) => {
       canvas.style.cursor = rodPoleAt(e.clientX, e.clientY) >= 0 || floatAt(e.clientX, e.clientY) >= 0 ? 'pointer' : 'crosshair'
+      if (isAiming) aimAt(e.clientX, e.clientY)
     }
     canvas.addEventListener('pointerdown', handlePointerDown)
     canvas.addEventListener('dblclick', handleDoubleClick)
     canvas.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
 
     const renderFrame = (W: number, H: number) => {
       const t = (performance.now() - startRef.current) / 1000
@@ -384,7 +400,9 @@ export function FishingCanvas() {
         ctx.strokeStyle = 'rgba(200,220,240,0.35)'
         ctx.lineWidth = 1
         for (let i = 0; i < 90; i++) {
-          const rx = (i * 53 + ((t * 500) % 100)) % W
+          // Drops are drawn tilted down-and-left (rx-6, ry+16), so their
+          // horizontal drift over time must also move left, not right.
+          const rx = (((i * 53 - t * 500) % W) + W) % W
           const ry = (i * 97 + t * 900) % H
           ctx.beginPath()
           ctx.moveTo(rx, ry)
@@ -417,6 +435,7 @@ export function FishingCanvas() {
       canvas.removeEventListener('pointerdown', handlePointerDown)
       canvas.removeEventListener('dblclick', handleDoubleClick)
       canvas.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
     }
   }, [])
 

@@ -7,6 +7,7 @@ import { SHOP_CATALOG } from '@/game/economy/shopCatalog'
 import { computeSalePrice } from '@/game/economy/types'
 import { QUESTS } from '@/data/quests/quests'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 import type { EquipmentItem } from '@/game/equipment/types'
 
 const TABS: { key: 'livewell' | 'shop' | 'quests' | 'locations'; label: string }[] = [
@@ -165,9 +166,10 @@ export function BaseModal() {
   const closeModal = useUiStore((s) => s.closeModal)
   const baseTab = useUiStore((s) => s.baseTab)
   const setBaseTab = useUiStore((s) => s.setBaseTab)
+  const backdrop = useBackdropClose(closeModal)
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-2xl p-5 max-h-[85vh] overflow-y-auto" >
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">

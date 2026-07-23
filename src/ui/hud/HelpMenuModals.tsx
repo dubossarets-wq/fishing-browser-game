@@ -2,11 +2,13 @@ import { useUiStore } from '@/app/uiStore'
 import { useGameStore } from '@/app/store'
 import { useNetworkStore } from '@/app/networkStore'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 
 export function HelpModal() {
   const closeModal = useUiStore((s) => s.closeModal)
+  const backdrop = useBackdropClose(closeModal)
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-lg p-5" >
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
@@ -35,8 +37,9 @@ export function MenuModal() {
   const saveNow = useGameStore((s) => s.saveNow)
   const netStatus = useNetworkStore((s) => s.status)
   const logout = useNetworkStore((s) => s.logout)
+  const backdrop = useBackdropClose(closeModal)
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-xs p-5" >
         <div onClick={(e) => e.stopPropagation()} className="flex flex-col gap-2">
           <h2 className="text-lg font-bold mb-2">Меню</h2>

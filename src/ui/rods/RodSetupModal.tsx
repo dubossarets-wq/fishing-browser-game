@@ -3,6 +3,7 @@ import { useUiStore } from '@/app/uiStore'
 import { getShopItemById } from '@/game/economy/shopCatalog'
 import { BAITS } from '@/data/items/baits'
 import { Button, Panel } from '@/ui/common/Panel'
+import { useBackdropClose } from '@/ui/common/useBackdropClose'
 import type { RodLoadout } from '@/game/equipment/types'
 
 const SLOT_LABELS: Record<string, string> = {
@@ -67,9 +68,10 @@ export function RodSetupModal() {
     .filter((b) => b.def)
 
   const canFinish = rod.loadout.rod && rod.loadout.reel && rod.loadout.line && rod.loadout.hook && rod.loadout.bait
+  const backdrop = useBackdropClose(closeModal)
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
+    <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" {...backdrop}>
       <Panel paper className="w-full max-w-xl p-5 max-h-[85vh] overflow-y-auto" >
         <div onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-3">
