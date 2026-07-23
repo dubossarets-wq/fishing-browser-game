@@ -15,6 +15,7 @@ import { SettingsModal } from '@/ui/hud/SettingsModal'
 import { AdminPanel } from '@/ui/admin/AdminPanel'
 import { DevOverlay } from '@/ui/admin/DevOverlay'
 import { FishingCanvas } from '@/engine/canvas/FishingCanvas'
+import { SceneBackdrop } from '@/engine/canvas/SceneBackdrop'
 
 function App() {
   useGameLoop()
@@ -28,6 +29,7 @@ function App() {
       </div>
 
       <div className="relative min-h-0 bg-black">
+        <SceneBackdrop />
         <FishingCanvas />
         <FightOverlay />
         <CastButton />

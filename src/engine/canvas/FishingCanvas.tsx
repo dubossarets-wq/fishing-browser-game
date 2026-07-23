@@ -226,55 +226,64 @@ export function FishingCanvas() {
       const timeOfDay = getTimeOfDay(Math.floor(hourFraction))
       const sky = getSkyPalette(hourFraction, store.weather.kind)
       const loc = getLocationPalette(store.currentLocationId)
+      const locationDef = getLocationById(store.currentLocationId)
+      const photoScene = locationDef?.photoScene
 
       const horizonY = H * 0.48
       const bankTop = H * 0.84
       const bankBottom = H
 
-      // Sky
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY)
-      skyGrad.addColorStop(0, sky.skyTop)
-      skyGrad.addColorStop(1, sky.skyBottom)
-      ctx.fillStyle = skyGrad
-      ctx.fillRect(0, 0, W, horizonY)
+      if (photoScene) {
+        // A real photo backdrop (SceneBackdrop.tsx) sits behind the canvas for
+        // this location — leave the sky/water region transparent instead of
+        // painting the procedural gradient over it.
+        ctx.clearRect(0, 0, W, bankTop)
+      } else {
+        // Sky
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY)
+        skyGrad.addColorStop(0, sky.skyTop)
+        skyGrad.addColorStop(1, sky.skyBottom)
+        ctx.fillStyle = skyGrad
+        ctx.fillRect(0, 0, W, horizonY)
 
-      // Sun / moon
-      const sunX = W * (0.2 + 0.6 * (hourFraction / 24))
-      const sunY = horizonY * (0.75 - 0.5 * Math.sin((hourFraction / 24) * Math.PI))
-      ctx.save()
-      ctx.globalAlpha = timeOfDay === 'night' ? 0.85 : 0.8
-      const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 60)
-      glow.addColorStop(0, sky.sunColor)
-      glow.addColorStop(1, 'rgba(255,255,255,0)')
-      ctx.fillStyle = glow
-      ctx.beginPath()
-      ctx.arc(sunX, sunY, 60, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.restore()
-
-      // Clouds
-      if (store.weather.kind !== 'fog') {
+        // Sun / moon
+        const sunX = W * (0.2 + 0.6 * (hourFraction / 24))
+        const sunY = horizonY * (0.75 - 0.5 * Math.sin((hourFraction / 24) * Math.PI))
         ctx.save()
-        ctx.globalAlpha = store.weather.kind === 'cloudy' ? 0.5 : 0.28
-        for (let i = 0; i < 4; i++) {
-          const cx = ((t * 6 + i * 260) % (W + 200)) - 100
-          const cy = horizonY * (0.18 + i * 0.12)
-          drawCloud(ctx, cx, cy, 46 + i * 8)
-        }
+        ctx.globalAlpha = timeOfDay === 'night' ? 0.85 : 0.8
+        const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 60)
+        glow.addColorStop(0, sky.sunColor)
+        glow.addColorStop(1, 'rgba(255,255,255,0)')
+        ctx.fillStyle = glow
+        ctx.beginPath()
+        ctx.arc(sunX, sunY, 60, 0, Math.PI * 2)
+        ctx.fill()
         ctx.restore()
+
+        // Clouds
+        if (store.weather.kind !== 'fog') {
+          ctx.save()
+          ctx.globalAlpha = store.weather.kind === 'cloudy' ? 0.5 : 0.28
+          for (let i = 0; i < 4; i++) {
+            const cx = ((t * 6 + i * 260) % (W + 200)) - 100
+            const cy = horizonY * (0.18 + i * 0.12)
+            drawCloud(ctx, cx, cy, 46 + i * 8)
+          }
+          ctx.restore()
+        }
+
+        // Hills (static silhouette — must not drift with time)
+        drawHillBand(ctx, W, horizonY - H * 0.05, horizonY, loc.hillFar, 0, 0.55)
+        drawHillBand(ctx, W, horizonY - H * 0.02, horizonY, loc.hillNear, 40, 0.9)
+        drawTreeline(ctx, W, horizonY, loc.treeline)
+
+        // Water
+        const waterGrad = ctx.createLinearGradient(0, horizonY, 0, bankTop)
+        waterGrad.addColorStop(0, sky.waterTop)
+        waterGrad.addColorStop(1, sky.waterBottom)
+        ctx.fillStyle = waterGrad
+        ctx.fillRect(0, horizonY, W, bankTop - horizonY)
       }
-
-      // Hills (static silhouette — must not drift with time)
-      drawHillBand(ctx, W, horizonY - H * 0.05, horizonY, loc.hillFar, 0, 0.55)
-      drawHillBand(ctx, W, horizonY - H * 0.02, horizonY, loc.hillNear, 40, 0.9)
-      drawTreeline(ctx, W, horizonY, loc.treeline)
-
-      // Water
-      const waterGrad = ctx.createLinearGradient(0, horizonY, 0, bankTop)
-      waterGrad.addColorStop(0, sky.waterTop)
-      waterGrad.addColorStop(1, sky.waterBottom)
-      ctx.fillStyle = waterGrad
-      ctx.fillRect(0, horizonY, W, bankTop - horizonY)
 
       drawRipples(ctx, W, horizonY, bankTop, t)
 
@@ -288,8 +297,8 @@ export function FishingCanvas() {
         ctx.fillRect(0, horizonY - H * 0.1, W, H * 0.28)
       }
 
-      // Ambient darkness overlay
-      if (sky.ambientLight < 1) {
+      // Ambient darkness overlay (the photo backdrop already encodes lighting per time-of-day)
+      if (!photoScene && sky.ambientLight < 1) {
         ctx.fillStyle = `rgba(4,8,18,${(1 - sky.ambientLight) * 0.55})`
         ctx.fillRect(0, 0, W, bankTop)
       }

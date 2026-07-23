@@ -3,9 +3,19 @@ import type { LocationDefinition } from '@/game/locations/types'
 export const LOCATIONS: LocationDefinition[] = [
   {
     id: 'clay_bend',
-    name: 'Глинистый плёс',
-    description: 'Спокойная заводь у глинистого обрыва. Хорошее место для новичков: мирная рыба держится у берега, изредка заходит хищник.',
+    name: 'Днестр',
+    description: 'Спокойный плёс на Днестре. Хорошее место для новичков: мирная рыба держится у берега, изредка заходит хищник.',
     backgroundImage: '/scenes/clay_bend.svg',
+    photoScene: {
+      morning: '/scenes/dniester/morning.webp',
+      midday: '/scenes/dniester/midday.webp',
+      evening: '/scenes/dniester/evening.webp',
+      night: '/scenes/dniester/night.webp',
+      morningStart: 5,
+      middayStart: 11,
+      eveningStart: 16 + 50 / 60,
+      nightStart: 21,
+    },
     ambientSound: 'river',
     depthProfile: [
       { distance: 0, depth: 0.3, bottom: 'sand' },
