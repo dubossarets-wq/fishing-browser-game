@@ -82,6 +82,9 @@ IVNYAK_BITE_ROD_IMG.src = '/rods/ivnyak-bite.png'
 const IVNYAK_BITE_HANDLE = { x: 700, y: 2850 }
 const IVNYAK_BITE_TIP = { x: 1845, y: 285 }
 
+const IVNYAK_SCALE_MULT = 4
+const IVNYAK_Y_OFFSET = 100
+
 function drawRodPolePhoto(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -644,12 +647,28 @@ function drawRod(
   const bend = rod.state === 'fight' ? Math.min(0.35, (rod.fight?.lineTension ?? 0) / 260) : rod.state === 'broken' ? 0.6 : 0.05
   const bentTipY = tipY + bend * 34
   const isIvnyak = rod.loadout.rod?.id === 'rod_float_basic'
+
+  // The Ивняк photo is rendered larger than the procedural rod and anchored
+  // lower — everything downstream (line, float, fish) must attach to where
+  // its tip actually ends up on screen, not the original vector-rod point.
+  let poleAnchorX = anchorX
+  let poleAnchorY = anchorY
+  let effTipX = tipX
+  let effTipY = tipY
+  let effBentTipY = bentTipY
+  if (isIvnyak) {
+    poleAnchorY = anchorY + IVNYAK_Y_OFFSET
+    effTipX = poleAnchorX + (tipX - anchorX) * IVNYAK_SCALE_MULT
+    effTipY = poleAnchorY + (tipY - anchorY) * IVNYAK_SCALE_MULT
+    effBentTipY = poleAnchorY + (bentTipY - anchorY) * IVNYAK_SCALE_MULT
+  }
+
   const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
   const ivnyakImg = isBiteOrFight ? IVNYAK_BITE_ROD_IMG : IVNYAK_ROD_IMG
   const ivnyakHandle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
   const ivnyakTip = isBiteOrFight ? IVNYAK_BITE_TIP : IVNYAK_TIP
   if (isIvnyak && ivnyakImg.complete && ivnyakImg.naturalWidth > 0) {
-    drawRodPolePhoto(ctx, ivnyakImg, ivnyakHandle, ivnyakTip, anchorX, anchorY, tipX, bentTipY)
+    drawRodPolePhoto(ctx, ivnyakImg, ivnyakHandle, ivnyakTip, poleAnchorX, poleAnchorY, effTipX, effBentTipY)
   } else {
     ctx.strokeStyle = color
     ctx.lineWidth = 4
@@ -663,14 +682,14 @@ function drawRod(
 
   if (!casted) {
     drawCastPreview(ctx, rod, active, W, horizonY, bankY, t)
-    drawHangingFloat(ctx, rod, tipX, tipY, t, reelAnim)
+    drawHangingFloat(ctx, rod, effTipX, effTipY, t, reelAnim)
     return
   }
 
-  const realTipY = tipY + bend * 34
+  const realTipY = effBentTipY
 
   if (rod.state === 'caught' && rod.lastResultFish) {
-    drawCaughtFish(ctx, tipX, realTipY, rod.lastResultFish.weight, t)
+    drawCaughtFish(ctx, effTipX, realTipY, rod.lastResultFish.weight, t)
     return
   }
 
@@ -684,14 +703,14 @@ function drawRod(
   if (inFlight) {
     const flightProgress = easeOutCubic(rod.waitTimeMs / CAST_FLIGHT_MS)
     const arcLift = Math.sin(flightProgress * Math.PI) * 16
-    displayX = tipX + (water.x - tipX) * flightProgress
+    displayX = effTipX + (water.x - effTipX) * flightProgress
     displayY = realTipY + (water.y - realTipY) * flightProgress - arcLift
   } else if (rod.state === 'fight' && rod.fight) {
     // The fish's on-screen position tracks how much line is actually out — reeling
     // in pulls it visibly toward THIS rod's own tip, not the screen centre, and
     // letting it run pays it back out toward where it was originally hooked.
     const lineOutFrac = Math.min(1, Math.max(0, rod.fight.lineOut / rod.fight.maxLineOut))
-    displayX = tipX + (water.x - tipX) * lineOutFrac
+    displayX = effTipX + (water.x - effTipX) * lineOutFrac
     displayY = realTipY + (water.y - realTipY) * lineOutFrac
   }
 
@@ -716,7 +735,7 @@ function drawRod(
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.moveTo(tipX, realTipY)
+  ctx.moveTo(effTipX, realTipY)
   ctx.lineTo(displayX, floatVisible ? floatY : displayY - 2)
   ctx.stroke()
 
