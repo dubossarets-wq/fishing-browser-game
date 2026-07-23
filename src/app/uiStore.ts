@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { soundManager } from '@/engine/audio/soundManager'
 
-export type ModalKind = 'none' | 'setup' | 'base' | 'help' | 'menu' | 'inventory' | 'auth' | 'settings'
+export type ModalKind = 'none' | 'setup' | 'base' | 'help' | 'menu' | 'inventory' | 'auth' | 'settings' | 'admin'
 
 const VOLUME_KEY = 'fishing-sim.volume'
 const MUTED_KEY = 'fishing-sim.muted'

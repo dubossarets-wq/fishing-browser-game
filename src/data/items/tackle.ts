@@ -1,4 +1,4 @@
-import type { ReelItem, LineItem, HookItem, SinkerItem, FloatItem, FeederItem } from '@/game/equipment/types'
+import type { ReelItem, LineItem, LeaderItem, HookItem, SinkerItem, FloatItem, FeederItem } from '@/game/equipment/types'
 
 export const REELS: ReelItem[] = [
   { id: 'reel_basic', category: 'reel', name: 'Катушка "Эконом 2000"', description: 'Простая безынерционная катушка.', lineCapacity: 100, dragMax: 4, gearRatio: 4.8, durability: 100, maxDurability: 100, retrieveSpeed: 40, price: 900 },
@@ -11,6 +11,13 @@ export const LINES: LineItem[] = [
   { id: 'line_030', category: 'line', name: 'Леска 0.30мм', description: 'Универсальная леска среднего класса.', diameter: 0.3, breakingStrength: 7, visibility: 45, stretch: 50, lengthOnSpool: 150, price: 260 },
   { id: 'line_045', category: 'line', name: 'Плетёный шнур 0.45мм', description: 'Прочный плетёный шнур для хищника.', diameter: 0.45, breakingStrength: 18, visibility: 60, stretch: 15, lengthOnSpool: 150, price: 620 },
   { id: 'line_060', category: 'line', name: 'Шнур 0.60мм усиленный', description: 'Для сома и крупного карпа.', diameter: 0.6, breakingStrength: 32, visibility: 70, stretch: 10, lengthOnSpool: 200, price: 980 },
+]
+
+export const LEADERS: LeaderItem[] = [
+  { id: 'leader_mono', category: 'leader', material: 'mono', name: 'Поводок монофильный', description: 'Простой и недорогой, умеренно заметен.', visibility: 55, breakingStrength: 4, biteThroughResistance: 5, length: 50, price: 90 },
+  { id: 'leader_fluoro', category: 'leader', material: 'fluorocarbon', name: 'Поводок флюорокарбоновый', description: 'Почти невидим в воде — для осторожной рыбы.', visibility: 20, breakingStrength: 5, biteThroughResistance: 10, length: 50, price: 220 },
+  { id: 'leader_braid', category: 'leader', material: 'braid', name: 'Поводковый материал плетёный', description: 'Прочный и тонкий, для активной проводки.', visibility: 45, breakingStrength: 9, biteThroughResistance: 15, length: 40, price: 260 },
+  { id: 'leader_wire', category: 'leader', material: 'wire', name: 'Металлический поводок', description: 'Спасает от зубов щуки, но хорошо заметен.', visibility: 70, breakingStrength: 12, biteThroughResistance: 95, length: 30, price: 150 },
 ]
 
 export const HOOKS: HookItem[] = [

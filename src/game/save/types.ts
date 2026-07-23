@@ -5,6 +5,7 @@ import type { RodLoadout } from '@/game/equipment/types'
 import type { GameClock } from '@/game/time/types'
 import type { WeatherState } from '@/game/weather/types'
 import type { CaughtFish } from '@/game/fish/types'
+import type { AdminState } from '@/game/admin/types'
 
 export const SAVE_VERSION = 1
 
@@ -46,6 +47,7 @@ export interface SaveGameV1 {
   clock: GameClock
   weather: WeatherState
   livewell: CaughtFish[]
+  admin?: AdminState // optional — absent in saves created before the admin system existed
 }
 
 export type SaveGame = SaveGameV1

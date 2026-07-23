@@ -54,7 +54,7 @@ function LivewellTab() {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  rod: 'Удилища', reel: 'Катушки', line: 'Леска', hook: 'Крючки', sinker: 'Грузила',
+  rod: 'Удилища', reel: 'Катушки', line: 'Леска', leader: 'Поводки', hook: 'Крючки', sinker: 'Грузила',
   float: 'Поплавки', feeder: 'Кормушки', bait: 'Наживка', groundbait: 'Прикормка', food: 'Еда',
 }
 

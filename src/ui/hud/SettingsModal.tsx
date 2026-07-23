@@ -1,13 +1,32 @@
+import { useState } from 'react'
 import { useUiStore } from '@/app/uiStore'
+import { useGameStore } from '@/app/store'
 import { soundManager } from '@/engine/audio/soundManager'
 import { Button, Panel } from '@/ui/common/Panel'
 
 export function SettingsModal() {
   const closeModal = useUiStore((s) => s.closeModal)
+  const openModal = useUiStore((s) => s.openModal)
   const volume = useUiStore((s) => s.volume)
   const setVolume = useUiStore((s) => s.setVolume)
   const muted = useUiStore((s) => s.muted)
   const toggleMuted = useUiStore((s) => s.toggleMuted)
+  const isAdmin = useGameStore((s) => s.admin.isAdmin)
+  const unlockAdmin = useGameStore((s) => s.unlockAdmin)
+
+  const [devOpen, setDevOpen] = useState(false)
+  const [code, setCode] = useState('')
+  const [codeError, setCodeError] = useState(false)
+
+  const submitCode = () => {
+    if (unlockAdmin(code.trim())) {
+      setCode('')
+      setCodeError(false)
+      setDevOpen(false)
+    } else {
+      setCodeError(true)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 z-40 flex items-center justify-center p-6" onClick={closeModal}>
@@ -40,6 +59,31 @@ export function SettingsModal() {
           </label>
 
           <Button className="mt-5 w-full" onClick={closeModal}>Готово</Button>
+
+          <div className="mt-5 pt-3 border-t border-black/10 text-center">
+            {isAdmin ? (
+              <button
+                onClick={() => { closeModal(); openModal('admin') }}
+                className="text-[11px] text-brass-500 underline opacity-70 hover:opacity-100"
+              >
+                Панель разработчика
+              </button>
+            ) : devOpen ? (
+              <div className="flex gap-1.5 justify-center">
+                <input
+                  value={code}
+                  onChange={(e) => { setCode(e.target.value); setCodeError(false) }}
+                  onKeyDown={(e) => e.key === 'Enter' && submitCode()}
+                  placeholder="код"
+                  autoFocus
+                  className={`text-xs px-2 py-1 rounded-sm border bg-black/5 outline-none ${codeError ? 'border-ember-500' : 'border-black/10'}`}
+                />
+                <button onClick={submitCode} className="text-xs px-2 py-1 rounded-sm bg-black/10 hover:bg-black/20">OK</button>
+              </div>
+            ) : (
+              <button onClick={() => setDevOpen(true)} className="text-[10px] opacity-25 hover:opacity-50">·</button>
+            )}
+          </div>
         </div>
       </Panel>
     </div>

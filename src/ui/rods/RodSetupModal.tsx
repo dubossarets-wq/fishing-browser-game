@@ -6,7 +6,7 @@ import { Button, Panel } from '@/ui/common/Panel'
 import type { RodLoadout } from '@/game/equipment/types'
 
 const SLOT_LABELS: Record<string, string> = {
-  rod: 'Удилище', reel: 'Катушка', line: 'Леска', hook: 'Крючок',
+  rod: 'Удилище', reel: 'Катушка', line: 'Леска', leader: 'Поводок', hook: 'Крючок',
   sinker: 'Грузило', float: 'Поплавок', feeder: 'Кормушка',
 }
 
@@ -53,6 +53,7 @@ export function RodSetupModal() {
   const openBase = useUiStore((s) => s.openBase)
   const rod = useGameStore((s) => s.rods[rodIndex])
   const setBaitOnRod = useGameStore((s) => s.setBaitOnRod)
+  const setBaitSandwich = useGameStore((s) => s.setBaitSandwich)
   const finishSetup = useGameStore((s) => s.finishSetup)
   const inventory = useGameStore((s) => s.inventory)
 
@@ -79,6 +80,7 @@ export function RodSetupModal() {
           <SlotRow rodIndex={rodIndex} slotKey="rod" current={rod.loadout.rod} />
           <SlotRow rodIndex={rodIndex} slotKey="reel" current={rod.loadout.reel} />
           <SlotRow rodIndex={rodIndex} slotKey="line" current={rod.loadout.line} />
+          <SlotRow rodIndex={rodIndex} slotKey="leader" current={rod.loadout.leader} />
           <SlotRow rodIndex={rodIndex} slotKey="hook" current={rod.loadout.hook} />
           <SlotRow rodIndex={rodIndex} slotKey="sinker" current={rod.loadout.sinker} />
           {showFloat && <SlotRow rodIndex={rodIndex} slotKey="float" current={rod.loadout.float} />}
@@ -99,6 +101,29 @@ export function RodSetupModal() {
               {availableBaits.length === 0 && <span className="text-xs opacity-40 italic">Наживки нет — загляните в магазин</span>}
             </div>
           </div>
+
+          {rod.loadout.bait && (
+            <div className="py-2">
+              <div className="text-xs opacity-60 mb-1">Бутерброд (необязательно) — второй компонент насадки</div>
+              <div className="flex gap-1.5 flex-wrap">
+                <button
+                  onClick={() => setBaitSandwich(rodIndex, null)}
+                  className={`text-xs px-2 py-1 rounded-sm border ${!rod.loadout.baitSandwich ? 'bg-brass-500 border-brass-500 text-wood-950 font-semibold' : 'bg-black/10 border-black/10 hover:bg-black/20'}`}
+                >
+                  Без бутерброда
+                </button>
+                {availableBaits.filter(({ stack }) => stack.itemId !== rod.loadout.bait).map(({ stack, def }) => (
+                  <button
+                    key={stack.id}
+                    onClick={() => setBaitSandwich(rodIndex, stack.itemId)}
+                    className={`text-xs px-2 py-1 rounded-sm border ${rod.loadout.baitSandwich === stack.itemId ? 'bg-brass-500 border-brass-500 text-wood-950 font-semibold' : 'bg-black/10 border-black/10 hover:bg-black/20'}`}
+                  >
+                    + {def?.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-black/10">
             <Button variant="ghost" onClick={() => { closeModal(); openBase('shop') }}>В магазин</Button>

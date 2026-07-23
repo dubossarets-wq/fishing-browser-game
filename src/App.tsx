@@ -12,6 +12,8 @@ import { SocialPanel } from '@/ui/social/SocialPanel'
 import { AuthModal } from '@/ui/social/AuthModal'
 import { HelpModal, MenuModal } from '@/ui/hud/HelpMenuModals'
 import { SettingsModal } from '@/ui/hud/SettingsModal'
+import { AdminPanel } from '@/ui/admin/AdminPanel'
+import { DevOverlay } from '@/ui/admin/DevOverlay'
 import { FishingCanvas } from '@/engine/canvas/FishingCanvas'
 
 function App() {
@@ -29,6 +31,7 @@ function App() {
         <FishingCanvas />
         <FightOverlay />
         <CastButton />
+        <DevOverlay />
       </div>
 
       <div className="min-h-0">
@@ -49,6 +52,7 @@ function App() {
       {modal === 'menu' && <MenuModal />}
       {modal === 'auth' && <AuthModal />}
       {modal === 'settings' && <SettingsModal />}
+      {modal === 'admin' && <AdminPanel />}
     </div>
   )
 }

@@ -28,6 +28,7 @@ export interface LocationDefinition {
   travelCost: number
   licensePerDay: number
   maxAnglers: number
+  baseCurrentSpeed: number // 0-100, still lake vs flowing river
 }
 
 export function sampleDepthAt(location: LocationDefinition, distance: number): DepthPoint {

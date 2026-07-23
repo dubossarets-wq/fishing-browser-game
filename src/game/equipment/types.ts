@@ -1,6 +1,6 @@
-import type { BaitId } from '@/game/fish/types'
+import type { BaitId, FeedingType } from '@/game/fish/types'
 
-export type ItemCategory = 'rod' | 'reel' | 'line' | 'hook' | 'sinker' | 'float' | 'feeder' | 'bait' | 'groundbait' | 'food' | 'tool' | 'trophy'
+export type ItemCategory = 'rod' | 'reel' | 'line' | 'leader' | 'hook' | 'sinker' | 'float' | 'feeder' | 'bait' | 'groundbait' | 'food' | 'tool' | 'trophy'
 
 export type RodKind = 'float' | 'feeder' | 'spinning' | 'carp' | 'bottom'
 
@@ -46,6 +46,21 @@ export interface LineItem {
   price: number
 }
 
+export type LeaderMaterial = 'mono' | 'fluorocarbon' | 'braid' | 'wire'
+
+export interface LeaderItem {
+  id: string
+  category: 'leader'
+  material: LeaderMaterial
+  name: string
+  description: string
+  visibility: number // 1-100, lower is stealthier — fluorocarbon beats mono here
+  breakingStrength: number // kg
+  biteThroughResistance: number // 0-100 — resistance to a toothy fish severing it; only wire is high
+  length: number // cm
+  price: number
+}
+
 export type HookType = 'single' | 'treble' | 'circle' | 'wide-gap'
 
 export interface HookItem {
@@ -84,13 +99,25 @@ export interface FeederItem {
   price: number
 }
 
+export type BaitCategory = 'animal' | 'plant' | 'specialized'
+export type BaitBuoyancy = 'sink' | 'neutral' | 'float' | 'pop-up'
+
 export interface BaitItem {
   id: BaitId
   category: 'bait'
+  baitCategory: BaitCategory
   name: string
   description: string
-  freshness: number // 0-100
-  attractiveness: number // 1-100
+  freshness: number // 0-100, current state (decays once equipped/cast — see BaitSystem)
+  freshnessDecayPerGameHour: number // how fast it degrades once in play
+  attractiveness: number // 1-100, baseline pull independent of species match
+  size: number // 0-100, small to large — filters which fish sizes take it
+  smell: number // 0-100, scent strength — matters most to smell-sensitive species
+  naturalness: number // 0-100 — live bait is ~100, boilies/pastes much lower
+  buoyancy: BaitBuoyancy
+  movement: number // 0-100 — live/active bait, drives predator interest; 0 for inert bait
+  targetFeedingTypes: FeedingType[] // feeding-ecology groups this bait suits well
+  temperatureRange: [number, number] // water temp band where this bait performs best
   stackSize: number
   price: number
 }
@@ -100,8 +127,15 @@ export interface GroundbaitItem {
   category: 'groundbait'
   name: string
   description: string
-  attractiveness: number
-  spreadRadius: number
+  particleSize: number // 0-100 — fine mixes pull fish in faster but fill them up slower
+  nutrition: number // 0-100 — how filling; high-nutrition mixes satiate fish sooner
+  aromaStrength: number // 0-100 — effective radius of the scent cloud
+  cloudiness: number // 0-100 — visible attraction cloud, matters more in stained/moving water
+  stickiness: number // 0-100 — how tightly it holds together before breaking down
+  sinkingSpeed: number // 0-100
+  breakdownRate: number // 0-100 — higher = the zone depletes faster
+  speciesAffinity: Partial<Record<FeedingType, number>> // 0-100 multiplier per feeding-ecology group
+  spreadRadius: number // metres, base effective radius of the zone it creates
   uses: number
   price: number
 }
@@ -118,6 +152,7 @@ export type EquipmentItem =
   | RodItem
   | ReelItem
   | LineItem
+  | LeaderItem
   | HookItem
   | SinkerItem
   | FloatItem
@@ -130,11 +165,13 @@ export interface RodLoadout {
   rod: RodItem | null
   reel: ReelItem | null
   line: LineItem | null
+  leader: LeaderItem | null
   hook: HookItem | null
   sinker: SinkerItem | null
   float: FloatItem | null
   feeder: FeederItem | null
   bait: BaitId | null
+  baitSandwich: BaitId | null // optional second component, e.g. worm + maggot
 }
 
 export function createEmptyLoadout(): RodLoadout {
@@ -142,10 +179,12 @@ export function createEmptyLoadout(): RodLoadout {
     rod: null,
     reel: null,
     line: null,
+    leader: null,
     hook: null,
     sinker: null,
     float: null,
     feeder: null,
     bait: null,
+    baitSandwich: null,
   }
 }

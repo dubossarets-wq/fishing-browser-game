@@ -31,6 +31,7 @@ export const LOCATIONS: LocationDefinition[] = [
     travelCost: 0,
     licensePerDay: 150,
     maxAnglers: 12,
+    baseCurrentSpeed: 35,
   },
   {
     id: 'stone_reservoir',
@@ -58,6 +59,7 @@ export const LOCATIONS: LocationDefinition[] = [
     travelCost: 800,
     licensePerDay: 350,
     maxAnglers: 8,
+    baseCurrentSpeed: 12,
   },
   {
     id: 'quiet_backwater',
@@ -84,6 +86,7 @@ export const LOCATIONS: LocationDefinition[] = [
     travelCost: 1600,
     licensePerDay: 550,
     maxAnglers: 6,
+    baseCurrentSpeed: 4,
   },
 ]
 

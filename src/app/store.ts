@@ -5,13 +5,21 @@ import type { RodLoadout } from '@/game/equipment/types'
 import { createEmptyLoadout } from '@/game/equipment/types'
 import type { CaughtFish } from '@/game/fish/types'
 import { getFishSpeciesById, FISH_SPECIES } from '@/data/fish/species'
-import { tickBite, rollFishWeight, STAGE_TICK_MS, type BiteContext } from '@/game/bite/biteSystem'
+import { tickBite, rollFishWeight, rankCandidates, advanceGroundbaitSettle, STAGE_TICK_MS, type BiteContext } from '@/game/bite/biteSystem'
+import { setRodBiteDebug } from '@/game/bite/debugState'
 import { tickFight, createFightVitals, type FightInput, type FightGear, type FightOutcome } from '@/game/fight/fightSystem'
-import { sampleDepthAt } from '@/game/locations/types'
+import { sampleDepthAt, type LocationDefinition } from '@/game/locations/types'
 import { LOCATIONS, getLocationById } from '@/data/locations/locations'
 import { getRodById } from '@/data/items/rods'
 import { REELS, LINES, HOOKS, SINKERS, FLOATS } from '@/data/items/tackle'
-import { getBaitById } from '@/data/items/baits'
+import { getBaitById, getGroundbaitMixById } from '@/data/items/baits'
+import { computeEffectiveBait, computeBaitFreshness } from '@/game/bait/baitSystem'
+import type { EnvironmentState } from '@/game/environment/types'
+import { initEnvironment, getSeason, tickWaterTemperature, computeLightLevel, computeCurrentSpeed } from '@/game/environment/types'
+import type { GroundbaitZone } from '@/game/groundbait/types'
+import { feedZone, tickZones, findZoneNear } from '@/game/groundbait/types'
+import type { AdminState } from '@/game/admin/types'
+import { createDefaultAdminState, PermissionService, ADMIN_UNLOCK_CODE } from '@/game/admin/types'
 import type { GameClock } from '@/game/time/types'
 import { GAME_MINUTES_PER_REAL_SECOND, getTimeOfDay, getWeekday, formatClock } from '@/game/time/types'
 import type { WeatherState } from '@/game/weather/types'
@@ -50,6 +58,10 @@ export interface MockPlayer {
 
 function uid(): string {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random()}`
+}
+
+function spotKey(locationId: string, distance: number): string {
+  return `${locationId}:${Math.round(distance / 5) * 5}`
 }
 
 function starterLoadout(kind: 'float' | 'feeder' | 'spin'): RodLoadout {
@@ -96,6 +108,7 @@ interface GameState {
   stats: PlayerStats
   clock: GameClock
   weather: WeatherState
+  environment: EnvironmentState
   currentLocationId: string
   unlockedLocationIds: string[]
   inventory: InventoryState
@@ -108,7 +121,9 @@ interface GameState {
   events: EventLogEntry[]
   chatMessages: ChatMessage[]
   onlinePlayers: MockPlayer[]
-  groundbaitBonus: Record<string, number> // per rod slot key `${locationId}:${spotDistance}` -> bonus 0-1
+  groundbaitZones: GroundbaitZone[]
+  spotPressure: Record<string, number> // recent casting pressure per spot bucket, 0-100
+  admin: AdminState
   paused: boolean
 
   init: () => Promise<void>
@@ -118,6 +133,7 @@ interface GameState {
   setActiveRod: (index: 0 | 1 | 2) => void
   equipToRod: (rodIndex: 0 | 1 | 2, slotKey: keyof RodLoadout, stackId: string | null) => void
   setBaitOnRod: (rodIndex: 0 | 1 | 2, baitId: string | null) => void
+  setBaitSandwich: (rodIndex: 0 | 1 | 2, baitId: string | null) => void
   setCastParams: (rodIndex: 0 | 1 | 2, distance: number, angle: number) => void
   beginSetup: (rodIndex: 0 | 1 | 2) => void
   finishSetup: (rodIndex: 0 | 1 | 2) => void
@@ -140,6 +156,15 @@ interface GameState {
 
   pushEvent: (text: string, kind: EventLogEntry['kind']) => void
   sendChatMessage: (text: string) => void
+
+  unlockAdmin: (code: string) => boolean
+  setAdminFlag: (flag: keyof Omit<AdminState, 'isAdmin'>, value: boolean) => void
+  adminSetLevel: (level: number) => void
+  adminAddMoney: (amount: number) => void
+  adminSetWeather: (kind: WeatherState['kind']) => void
+  adminSetTemperature: (temp: number) => void
+  adminSetTime: (hour: number) => void
+  adminForceBite: (rodIndex: 0 | 1 | 2, speciesId: string) => void
 }
 
 function pickInitialQuestProgress(): Record<string, QuestProgress> {
@@ -148,12 +173,15 @@ function pickInitialQuestProgress(): Record<string, QuestProgress> {
   return map
 }
 
+const INITIAL_CLOCK: GameClock = { totalGameMinutes: 6 * 60 }
+
 export const useGameStore = create<GameState>((set, get) => ({
   initialized: false,
   player: createDefaultPlayer(),
   stats: createDefaultStats(),
-  clock: { totalGameMinutes: 6 * 60 },
+  clock: INITIAL_CLOCK,
   weather: DEFAULT_WEATHER,
+  environment: initEnvironment(INITIAL_CLOCK.totalGameMinutes, DEFAULT_WEATHER.temperature),
   currentLocationId: LOCATIONS[0].id,
   unlockedLocationIds: [LOCATIONS[0].id],
   inventory: defaultInventory(),
@@ -177,7 +205,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     { name: 'Marlin_74', fishCount: 132 },
     { name: 'Ondatra', fishCount: 8 },
   ],
-  groundbaitBonus: {},
+  groundbaitZones: [],
+  spotPressure: {},
+  admin: createDefaultAdminState(),
   paused: false,
 
   init: async () => {
@@ -188,6 +218,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         stats: save.stats,
         clock: save.clock,
         weather: save.weather,
+        environment: initEnvironment(save.clock.totalGameMinutes, save.weather.temperature),
         currentLocationId: save.currentLocationId,
         unlockedLocationIds: save.unlockedLocationIds,
         inventory: save.inventory,
@@ -199,6 +230,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         ],
         livewell: save.livewell,
         questProgress: Object.fromEntries(save.questProgress.map((p) => [p.questId, p])),
+        admin: save.admin ?? createDefaultAdminState(),
+        groundbaitZones: [],
+        spotPressure: {},
         initialized: true,
       })
     } else {
@@ -224,6 +258,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       clock: s.clock,
       weather: s.weather,
       livewell: s.livewell,
+      admin: s.admin,
     }
     await dbSaveGame(save)
   },
@@ -253,10 +288,34 @@ export const useGameStore = create<GameState>((set, get) => ({
     const location = getLocationById(state.currentLocationId)
     const timeOfDay = getTimeOfDay(Math.floor(nextClock.totalGameMinutes / 60) % 24)
 
+    const nextEnvironment: EnvironmentState = {
+      season: getSeason(nextClock.totalGameMinutes),
+      waterTemperature: tickWaterTemperature(state.environment.waterTemperature, nextWeather.temperature, gameMinutesDelta),
+      lightLevel: computeLightLevel((nextClock.totalGameMinutes / 60) % 24, nextWeather.kind),
+      currentSpeed: computeCurrentSpeed(location?.baseCurrentSpeed ?? 0, nextWeather.windSpeed, nextWeather.kind),
+    }
+
+    const settledZones = state.groundbaitZones.map((zone) => {
+      const zoneLoc = getLocationById(zone.locationId)
+      const zoneSpecies = zoneLoc ? FISH_SPECIES.filter((f) => zoneLoc.fishSpeciesIds.includes(f.id)) : []
+      return advanceGroundbaitSettle(zone, zoneSpecies, gameMinutesDelta)
+    })
+    const groundbaitZones = tickZones(settledZones, gameMinutesDelta, nextEnvironment.currentSpeed, getGroundbaitMixById)
+
+    const pressureDecay = 6 * (gameMinutesDelta / 60) // per game-hour
+    const spotPressure: Record<string, number> = {}
+    for (const [key, value] of Object.entries(state.spotPressure)) {
+      const next = value - pressureDecay
+      if (next > 0.5) spotPressure[key] = next
+    }
+
     const rods = state.rods.map((rod) => tickRod(rod, dtMs, {
       location,
       timeOfDay,
       weather: nextWeather,
+      environment: nextEnvironment,
+      groundbaitZones,
+      spotPressure,
       state,
     })) as [RodSlot, RodSlot, RodSlot]
 
@@ -266,7 +325,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       clock: nextClock,
       weather: nextWeather,
+      environment: nextEnvironment,
       economy: { ...state.economy, market: nextMarket },
+      groundbaitZones,
+      spotPressure,
       rods,
       player,
     })
@@ -315,6 +377,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ rods })
   },
 
+  setBaitSandwich: (rodIndex, baitId) => {
+    const state = get()
+    const rod = state.rods[rodIndex]
+    const rods = [...state.rods] as [RodSlot, RodSlot, RodSlot]
+    rods[rodIndex] = { ...rod, loadout: { ...rod.loadout, baitSandwich: baitId as RodLoadout['baitSandwich'] } }
+    set({ rods })
+  },
+
   setCastParams: (rodIndex, distance, angle) => {
     if (!Number.isFinite(distance) || !Number.isFinite(angle)) return
     const state = get()
@@ -348,16 +418,23 @@ export const useGameStore = create<GameState>((set, get) => ({
     const rod = state.rods[rodIndex]
     if (rod.state !== 'ready') return
     if (!rod.loadout.bait) return
-    const qty = getQuantity(state.inventory, rod.loadout.bait)
-    if (qty <= 0) {
-      get().pushEvent('Наживка закончилась — пополните запас в магазине.', 'warning')
-      return
+
+    const bypassBaitCost = PermissionService.has(state.admin, 'debug.no-bait-cost')
+    if (!bypassBaitCost) {
+      const qty = getQuantity(state.inventory, rod.loadout.bait)
+      if (qty <= 0) {
+        get().pushEvent('Наживка закончилась — пополните запас в магазине.', 'warning')
+        return
+      }
     }
-    const inventory = removeFromInventory(state.inventory, rod.loadout.bait, 1)
+    const inventory = bypassBaitCost ? state.inventory : removeFromInventory(state.inventory, rod.loadout.bait, 1)
+    const key = spotKey(state.currentLocationId, rod.castDistance)
+    const spotPressure = { ...state.spotPressure, [key]: Math.min(100, (state.spotPressure[key] ?? 0) + 18) }
+
     const rods = [...state.rods] as [RodSlot, RodSlot, RodSlot]
     rods[rodIndex] = { ...rod, state: 'waiting', biteStage: 'none', biteTimerMs: 0, waitTimeMs: 0, hookedFish: null, lastResultFish: null, brokenReason: null }
     soundManager.play('cast')
-    set({ rods, inventory })
+    set({ rods, inventory, spotPressure })
   },
 
   reelInEmpty: (rodIndex) => {
@@ -379,6 +456,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     const species = getFishSpeciesById(candidateId)
     if (!species) return
     const { weight } = rollFishWeight(species, Math.random)
+
+    if (PermissionService.has(state.admin, 'debug.instant-catch')) {
+      const fish: CaughtFish = {
+        instanceId: uid(), speciesId: species.id, weight,
+        isTrophy: weight >= species.trophyWeight * 0.92, caughtAt: Date.now(),
+        locationId: state.currentLocationId, baitId: rod.loadout.bait ?? 'worm', price: 0,
+      }
+      const rods = [...state.rods] as [RodSlot, RodSlot, RodSlot]
+      rods[rodIndex] = { ...rod, state: 'caught', biteStage: 'hooked', fight: null, hookedFish: null, lastResultFish: fish }
+      soundManager.play('catch')
+      set({ rods })
+      return
+    }
+
     const vitals = createFightVitals(species, weight)
     const rods = [...state.rods] as [RodSlot, RodSlot, RodSlot]
     rods[rodIndex] = { ...rod, state: 'fight', biteStage: 'hooked', fight: vitals, hookedFish: { speciesId: species.id, weight } }
@@ -501,8 +592,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     const item = getShopItemById(itemId)
     if (!item) return false
+    const unlimited = PermissionService.has(state.admin, 'economy.unlimited')
     const totalPrice = item.price * quantity
-    if (state.economy.money < totalPrice) return false
+    if (!unlimited && state.economy.money < totalPrice) return false
     let inventory = state.inventory
     const isDurable = item.category === 'rod' || item.category === 'reel'
     if (isDurable) {
@@ -518,7 +610,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
     set({
       inventory,
-      economy: { ...state.economy, money: state.economy.money - totalPrice, ledger: [...state.economy.ledger, ledgerEntry] },
+      economy: { ...state.economy, money: unlimited ? state.economy.money : state.economy.money - totalPrice, ledger: [...state.economy.ledger, ledgerEntry] },
     })
     soundManager.play('coin')
     return true
@@ -528,14 +620,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     const stack = state.inventory.stacks.find((s) => s.itemId === itemId && s.category === 'groundbait')
     if (!stack) return
+    const mix = getGroundbaitMixById(itemId)
+    if (!mix) return
     const rod = state.rods[rodIndex]
-    const key = `${state.currentLocationId}:${Math.round(rod.castDistance / 5) * 5}`
     const inventory = removeFromInventory(state.inventory, itemId, 1)
-    set({
-      inventory,
-      groundbaitBonus: { ...state.groundbaitBonus, [key]: Math.min(1, (state.groundbaitBonus[key] ?? 0) + 0.35) },
-    })
-    get().pushEvent('Точка прикормлена — активность рыбы здесь возрастёт.', 'info')
+    const groundbaitZones = feedZone(state.groundbaitZones, state.currentLocationId, rod.castDistance, rod.castAngle, mix, state.clock.totalGameMinutes)
+    set({ inventory, groundbaitZones })
+    get().pushEvent('Точка прикормлена — рыба будет постепенно подходить, не сразу.', 'info')
   },
 
   eatFood: (stackId) => {
@@ -555,11 +646,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     const loc = getLocationById(locationId)
     if (!loc) return
-    if (!state.unlockedLocationIds.includes(locationId) && loc.unlockLevel > state.player.level) {
+    const bypassUnlock = PermissionService.has(state.admin, 'unlock.all')
+    if (!bypassUnlock && !state.unlockedLocationIds.includes(locationId) && loc.unlockLevel > state.player.level) {
       get().pushEvent(`Локация «${loc.name}» откроется на уровне ${loc.unlockLevel}.`, 'warning')
       return
     }
-    if (state.economy.money < loc.travelCost) {
+    const bypassCost = PermissionService.has(state.admin, 'debug.no-travel-cost') || PermissionService.has(state.admin, 'economy.unlimited')
+    if (!bypassCost && state.economy.money < loc.travelCost) {
       get().pushEvent('Недостаточно денег на поездку.', 'warning')
       return
     }
@@ -573,8 +666,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       currentLocationId: locationId,
       unlockedLocationIds,
-      economy: { ...state.economy, money: state.economy.money - loc.travelCost, ledger: [...state.economy.ledger, ledgerEntry] },
+      economy: bypassCost ? state.economy : { ...state.economy, money: state.economy.money - loc.travelCost, ledger: [...state.economy.ledger, ledgerEntry] },
       rods: [createRodSlot(0, state.rods[0].loadout), createRodSlot(1, state.rods[1].loadout), createRodSlot(2, state.rods[2].loadout)],
+      groundbaitZones: [],
     })
     soundManager.startAmbient(loc.ambientSound, state.weather.windSpeed, state.weather.kind === 'rain')
     get().pushEvent(`Вы прибыли на локацию «${loc.name}».`, 'info')
@@ -629,6 +723,62 @@ export const useGameStore = create<GameState>((set, get) => ({
       chatMessages: [...state.chatMessages.slice(-49), msg, ...(reply ? [reply] : [])],
     })
   },
+
+  unlockAdmin: (code) => {
+    if (code !== ADMIN_UNLOCK_CODE) return false
+    const state = get()
+    set({ admin: { ...state.admin, isAdmin: true } })
+    get().pushEvent('Режим разработчика активирован.', 'info')
+    return true
+  },
+
+  setAdminFlag: (flag, value) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    set({ admin: { ...state.admin, [flag]: value } })
+  },
+
+  adminSetLevel: (level) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    set({ player: { ...state.player, level: Math.max(1, Math.round(level)), experience: 0 } })
+  },
+
+  adminAddMoney: (amount) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    set({ economy: { ...state.economy, money: Math.max(0, state.economy.money + amount) } })
+  },
+
+  adminSetWeather: (kind) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    set({ weather: { ...state.weather, kind } })
+  },
+
+  adminSetTemperature: (temp) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    set({ weather: { ...state.weather, temperature: temp } })
+  },
+
+  adminSetTime: (hour) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    const day = Math.floor(state.clock.totalGameMinutes / (24 * 60))
+    set({ clock: { totalGameMinutes: day * 24 * 60 + hour * 60 } })
+  },
+
+  adminForceBite: (rodIndex, speciesId) => {
+    const state = get()
+    if (!state.admin.isAdmin) return
+    const rod = state.rods[rodIndex]
+    if (rod.state !== 'waiting') return
+    rodCandidateSpecies.set(rodIndex, speciesId)
+    const rods = [...state.rods] as [RodSlot, RodSlot, RodSlot]
+    rods[rodIndex] = { ...rod, biteStage: 'strong-bite', biteTimerMs: 0 }
+    set({ rods })
+  },
 }))
 
 const rodCandidateSpecies = new Map<number, string | null>()
@@ -665,35 +815,67 @@ function maybeMockReply(): ChatMessage | null {
   return { id: uid(), author: authors[Math.floor(Math.random() * authors.length)], text: lines[Math.floor(Math.random() * lines.length)], timestamp: Date.now() }
 }
 
+function nearestSpotActivity(location: LocationDefinition, distance: number, angle: number): number {
+  let best = 1
+  let bestDist = Infinity
+  for (const spot of location.spots) {
+    const d = Math.hypot(distance - spot.distance, (angle - spot.angle) * 20)
+    if (d < bestDist) {
+      bestDist = d
+      best = spot.activityMultiplier
+    }
+  }
+  return bestDist < 15 ? best : 1
+}
+
 interface TickCtx {
-  location: ReturnType<typeof getLocationById>
+  location: LocationDefinition | undefined
   timeOfDay: ReturnType<typeof getTimeOfDay>
   weather: WeatherState
+  environment: EnvironmentState
+  groundbaitZones: GroundbaitZone[]
+  spotPressure: Record<string, number>
   state: GameState
 }
 
 function tickRod(rod: RodSlot, dtMs: number, ctx: TickCtx): RodSlot {
-  const { location, timeOfDay, weather } = ctx
+  const { location, timeOfDay, weather, environment } = ctx
   if (!location) return rod
 
   if (rod.state === 'waiting') {
     if (rod.biteStage === 'none' || rod.biteStage === 'interested' || rod.biteStage === 'nibble' || rod.biteStage === 'strong-bite') {
       const depthPoint = sampleDepthAt(location, rod.castDistance)
       const species = FISH_SPECIES.filter((f) => location.fishSpeciesIds.includes(f.id))
-      const key = `${ctx.state.currentLocationId}:${Math.round(rod.castDistance / 5) * 5}`
-      const groundbaitBonus = ctx.state.groundbaitBonus[key] ?? 0
+      const zone = findZoneNear(ctx.groundbaitZones, location.id, rod.castDistance, rod.castAngle)
+      const pressureKey = spotKey(location.id, rod.castDistance)
+      const pressure = ctx.spotPressure[pressureKey] ?? 0
+
+      const primaryBait = rod.loadout.bait ? getBaitById(rod.loadout.bait) : undefined
+      const secondaryBait = rod.loadout.baitSandwich ? getBaitById(rod.loadout.baitSandwich) : undefined
+      const effectiveBait = primaryBait ? computeEffectiveBait(primaryBait, secondaryBait ?? null) : null
+      const gameMinutesInWater = (rod.waitTimeMs / 1000) * GAME_MINUTES_PER_REAL_SECOND
+      const baitFreshness = primaryBait ? computeBaitFreshness(primaryBait, gameMinutesInWater) : 100
+
       const bctx: BiteContext = {
         species,
         depthPoint,
         timeOfDay,
         weather: weather.kind,
-        temperature: weather.temperature,
+        waterTemperature: environment.waterTemperature,
+        season: environment.season,
         pressureTrend: weather.pressureTrend,
+        lightLevel: environment.lightLevel,
+        currentSpeed: environment.currentSpeed,
         loadout: rod.loadout,
-        spotActivityMultiplier: 1,
-        groundbaitBonus,
+        effectiveBait,
+        baitFreshness,
+        spotActivityMultiplier: nearestSpotActivity(location, rod.castDistance, rod.castAngle),
+        groundbaitZone: zone,
+        mixLookup: getGroundbaitMixById,
+        fishingPressure: pressure,
         rng: Math.random,
       }
+
       // BiteSystem probabilities are calibrated per STAGE_TICK_MS (~250ms) of
       // stage time, not per animation frame — only actually roll once that
       // much time has accumulated, or bites would fire ~60x too often.
@@ -701,6 +883,10 @@ function tickRod(rod: RodSlot, dtMs: number, ctx: TickCtx): RodSlot {
       const crossedRollBoundary = Math.floor(rod.biteTimerMs / STAGE_TICK_MS) !== Math.floor(nextTimerMsRaw / STAGE_TICK_MS)
       if (!crossedRollBoundary) {
         return { ...rod, biteTimerMs: nextTimerMsRaw, waitTimeMs: rod.waitTimeMs + dtMs }
+      }
+
+      if (ctx.state.admin.isAdmin && ctx.state.admin.showDebugOverlay && rod.slotIndex === ctx.state.activeRodIndex) {
+        setRodBiteDebug(rod.slotIndex, rankCandidates(bctx).slice(0, 6))
       }
 
       const prevCandidate = rodCandidateSpecies.get(rod.slotIndex) ?? null
@@ -731,6 +917,9 @@ function tickRod(rod: RodSlot, dtMs: number, ctx: TickCtx): RodSlot {
     const result = tickFight(rod.fight, species, fightGear, input, dtMs, Math.random)
 
     if (result.outcome !== 'ongoing') {
+      if (result.outcome !== 'caught' && PermissionService.has(ctx.state.admin, 'debug.god-mode')) {
+        return { ...rod, fight: result.vitals } // god mode: shrug off the break and keep fighting
+      }
       return resolveFightOutcome(rod, result.outcome, result.vitals)
     }
     return { ...rod, fight: result.vitals }
