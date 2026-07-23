@@ -16,7 +16,7 @@ const BANK_X = [0.24, 0.5, 0.76]
 // old near-shore band, so the clickable zone should match what's on screen.
 // Tune either margin here; everything that resolves a click/drag to a cast
 // target clamps through this first.
-const CAST_ZONE_MARGIN_X = 100
+const CAST_ZONE_MARGIN_X = 0
 const CAST_ZONE_BOTTOM_MARGIN = 20
 
 function clampToCastZone(x: number, y: number, W: number, H: number, horizonY: number) {
@@ -90,90 +90,26 @@ interface ReelAnim {
 
 const REEL_ANIM_MS = 380
 
-// The line must attach exactly where the rod's tip actually is in the photo,
-// not just wherever the image file happens to end — a diagonal cutout rod
-// almost never reaches the literal top-right pixel of its own bounding box,
-// so anchoring there leaves the line visibly floating off the tip. Instead,
-// once each image loads, scan its alpha channel for the topmost opaque row
-// and the rightmost opaque pixel near it — that's the real tip, at the
-// photo's own top-right edge — and use that as the anchor from then on.
-function findTipFromAlpha(img: HTMLImageElement, tip: { x: number; y: number }) {
-  const scan = () => {
-    try {
-      const w = img.naturalWidth
-      const h = img.naturalHeight
-      const off = document.createElement('canvas')
-      off.width = w
-      off.height = h
-      const octx = off.getContext('2d', { willReadFrequently: true })
-      if (!octx) return
-      octx.drawImage(img, 0, 0)
-      const { data } = octx.getImageData(0, 0, w, h)
-      // Solidly opaque only — a faint anti-aliased fringe can extend a few
-      // px past where the tip visually reads as "there", which would leave
-      // the line anchored just outside the rod's actual visible pixels.
-      const ALPHA_MIN = 140
-      const alphaAt = (x: number, y: number) => data[(y * w + x) * 4 + 3]
-
-      let topY = -1
-      for (let y = 0; y < h && topY < 0; y++) {
-        for (let x = w - 1; x >= 0; x--) {
-          if (alphaAt(x, y) > ALPHA_MIN) {
-            topY = y
-            break
-          }
-        }
-      }
-      if (topY < 0) return
-
-      // Narrow band right at the top — wide enough to survive a couple of
-      // rows of anti-aliasing, narrow enough not to drift down onto the
-      // shaft where it starts curving away from the true tip.
-      let rightX = -1
-      for (let y = topY; y < Math.min(h, topY + 6); y++) {
-        for (let x = w - 1; x >= 0; x--) {
-          if (alphaAt(x, y) > ALPHA_MIN) {
-            if (x > rightX) rightX = x
-            break
-          }
-        }
-      }
-      if (rightX < 0) return
-
-      tip.x = rightX
-      tip.y = topY
-    } catch {
-      // Canvas read failed (e.g. file:// during local dev without a server) —
-      // keep whatever fallback tip was set and move on.
-    }
-  }
-  if (img.complete) scan()
-  else img.addEventListener('load', scan, { once: true })
-}
-
 // "Ивняк" (rod_float_basic) is rendered from real photos instead of the
 // procedural stroke — a straight one for idle/waiting, and an already-bent
 // one for an actual bite/fight (its curve is baked into the photo, not
 // computed). handle/tip are each photo's own butt-cap and tip-guide pixel
-// positions, used to align it between the rod's anchor and its tip on screen.
+// positions (hand-picked from the source images), used to align it between
+// the rod's default anchor and default tip on screen — same size and
+// position as every other rod, no special scaling or offset.
 const IVNYAK_ROD_IMG = new Image()
 IVNYAK_ROD_IMG.src = '/rods/ivnyak.png'
 const IVNYAK_HANDLE = { x: 28, y: 1348 }
+const IVNYAK_TIP = { x: 385, y: 8 }
 const IVNYAK_IMG_W = 394
 const IVNYAK_IMG_H = 1361
-const IVNYAK_TIP = { x: IVNYAK_IMG_W, y: 0 } // refined below once the photo loads
-findTipFromAlpha(IVNYAK_ROD_IMG, IVNYAK_TIP)
 
 const IVNYAK_BITE_ROD_IMG = new Image()
 IVNYAK_BITE_ROD_IMG.src = '/rods/ivnyak-bite.png'
 const IVNYAK_BITE_HANDLE = { x: 700, y: 2850 }
+const IVNYAK_BITE_TIP = { x: 1845, y: 285 }
 const IVNYAK_BITE_IMG_W = 2170
 const IVNYAK_BITE_IMG_H = 2900
-const IVNYAK_BITE_TIP = { x: IVNYAK_BITE_IMG_W, y: 0 } // refined below once the photo loads
-findTipFromAlpha(IVNYAK_BITE_ROD_IMG, IVNYAK_BITE_TIP)
-
-const IVNYAK_SCALE_MULT = 4
-const IVNYAK_Y_OFFSET = 100
 
 function ivnyakPoleFit(
   handle: { x: number; y: number },
@@ -292,19 +228,6 @@ function drawRodPolePhoto(
   ctx.restore()
 }
 
-// The Ивняк photo is rendered larger than the procedural rod and anchored
-// lower — everything that needs to know where the rod actually is on screen
-// (the line/float attach point, and click hit-testing) must use this same
-// effective anchor/tip, not the original vector-rod geometry.
-function ivnyakEffectiveGeometry(anchorX: number, anchorY: number, tipX: number, tipY: number, bentTipY: number) {
-  const poleAnchorX = anchorX
-  const poleAnchorY = anchorY + IVNYAK_Y_OFFSET
-  const effTipX = poleAnchorX + (tipX - anchorX) * IVNYAK_SCALE_MULT
-  const effTipY = poleAnchorY + (tipY - anchorY) * IVNYAK_SCALE_MULT
-  const effBentTipY = poleAnchorY + (bentTipY - anchorY) * IVNYAK_SCALE_MULT
-  return { poleAnchorX, poleAnchorY, effTipX, effTipY, effBentTipY }
-}
-
 // Hit-test a screen point against the photo's own rectangular bounds (not
 // just a thin line down its middle) by inverse-transforming the point back
 // into the image's local pixel space.
@@ -387,13 +310,12 @@ export function FishingCanvas() {
         if (rod.loadout.rod?.id === 'rod_float_basic') {
           const bend = rod.state === 'fight' ? Math.min(0.35, (rod.fight?.lineTension ?? 0) / 260) : rod.state === 'broken' ? 0.6 : 0.05
           const bentTipY = tipY + bend * 34
-          const { poleAnchorX, poleAnchorY, effTipX, effBentTipY } = ivnyakEffectiveGeometry(anchorX, anchorY, tipX, tipY, bentTipY)
           const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
           const handle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
           const tip = isBiteOrFight ? IVNYAK_BITE_TIP : IVNYAK_TIP
           const imgW = isBiteOrFight ? IVNYAK_BITE_IMG_W : IVNYAK_IMG_W
           const imgH = isBiteOrFight ? IVNYAK_BITE_IMG_H : IVNYAK_IMG_H
-          if (pointOnRodPhoto(x, y, imgW, imgH, handle, tip, poleAnchorX, poleAnchorY, effTipX, effBentTipY)) {
+          if (pointOnRodPhoto(x, y, imgW, imgH, handle, tip, anchorX, anchorY, tipX, bentTipY)) {
             bestDist = 0
             bestIndex = i
             return
@@ -888,15 +810,6 @@ function drawRod(
   const bentTipY = tipY + bend * 34
   const isIvnyak = rod.loadout.rod?.id === 'rod_float_basic'
 
-  let poleAnchorX = anchorX
-  let poleAnchorY = anchorY
-  let effTipX = tipX
-  let effTipY = tipY
-  let effBentTipY = bentTipY
-  if (isIvnyak) {
-    ;({ poleAnchorX, poleAnchorY, effTipX, effTipY, effBentTipY } = ivnyakEffectiveGeometry(anchorX, anchorY, tipX, tipY, bentTipY))
-  }
-
   const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
   const ivnyakImg = isBiteOrFight ? IVNYAK_BITE_ROD_IMG : IVNYAK_ROD_IMG
   const ivnyakHandle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
@@ -904,7 +817,7 @@ function drawRod(
   const ivnyakImgW = isBiteOrFight ? IVNYAK_BITE_IMG_W : IVNYAK_IMG_W
   const ivnyakImgH = isBiteOrFight ? IVNYAK_BITE_IMG_H : IVNYAK_IMG_H
   if (isIvnyak && ivnyakImg.complete && ivnyakImg.naturalWidth > 0) {
-    drawRodPolePhoto(ctx, ivnyakImg, ivnyakImgW, ivnyakImgH, ivnyakHandle, ivnyakTip, poleAnchorX, poleAnchorY, effTipX, effBentTipY, timeOfDay)
+    drawRodPolePhoto(ctx, ivnyakImg, ivnyakImgW, ivnyakImgH, ivnyakHandle, ivnyakTip, anchorX, anchorY, tipX, bentTipY, timeOfDay)
   } else {
     ctx.strokeStyle = color
     ctx.lineWidth = 4
@@ -918,14 +831,14 @@ function drawRod(
 
   if (!casted) {
     drawCastPreview(ctx, rod, active, W, horizonY, bankY, t)
-    drawHangingFloat(ctx, rod, effTipX, effTipY, t, reelAnim)
+    drawHangingFloat(ctx, rod, tipX, tipY, t, reelAnim)
     return
   }
 
-  const realTipY = effBentTipY
+  const realTipY = bentTipY
 
   if (rod.state === 'caught' && rod.lastResultFish) {
-    drawCaughtFish(ctx, effTipX, realTipY, rod.lastResultFish.weight, t)
+    drawCaughtFish(ctx, tipX, realTipY, rod.lastResultFish.weight, t)
     return
   }
 
@@ -939,14 +852,14 @@ function drawRod(
   if (inFlight) {
     const flightProgress = easeOutCubic(rod.waitTimeMs / CAST_FLIGHT_MS)
     const arcLift = Math.sin(flightProgress * Math.PI) * 16
-    displayX = effTipX + (water.x - effTipX) * flightProgress
+    displayX = tipX + (water.x - tipX) * flightProgress
     displayY = realTipY + (water.y - realTipY) * flightProgress - arcLift
   } else if (rod.state === 'fight' && rod.fight) {
     // The fish's on-screen position tracks how much line is actually out — reeling
     // in pulls it visibly toward THIS rod's own tip, not the screen centre, and
     // letting it run pays it back out toward where it was originally hooked.
     const lineOutFrac = Math.min(1, Math.max(0, rod.fight.lineOut / rod.fight.maxLineOut))
-    displayX = effTipX + (water.x - effTipX) * lineOutFrac
+    displayX = tipX + (water.x - tipX) * lineOutFrac
     displayY = realTipY + (water.y - realTipY) * lineOutFrac
   }
 
@@ -971,7 +884,7 @@ function drawRod(
   ctx.strokeStyle = 'rgba(255,255,255,0.55)'
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.moveTo(effTipX, realTipY)
+  ctx.moveTo(tipX, realTipY)
   ctx.lineTo(displayX, floatVisible ? floatY : displayY - 2)
   ctx.stroke()
 
