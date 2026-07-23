@@ -8,14 +8,13 @@ export interface AuthResult {
 
 export async function signUp(email: string, password: string, username: string): Promise<AuthResult> {
   if (!supabase) return { ok: false, error: 'Онлайн-режим не настроен (нет ключей Supabase).' }
-  const { data, error } = await supabase.auth.signUp({ email, password })
+  // The profile row is created server-side by a database trigger (see
+  // supabase/schema.sql) — not here. Right after signUp() there may be no
+  // active session yet (email confirmation pending), so an RLS-protected
+  // insert from the client would be rejected; the trigger runs with elevated
+  // rights and isn't affected by that timing gap.
+  const { error } = await supabase.auth.signUp({ email, password, options: { data: { username } } })
   if (error) return { ok: false, error: error.message }
-  if (data.user) {
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({ id: data.user.id, username, level: 1, total_fish: 0, total_weight_kg: 0 })
-    if (profileError) return { ok: false, error: profileError.message }
-  }
   return { ok: true }
 }
 

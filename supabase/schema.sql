@@ -50,3 +50,24 @@ create policy "Authenticated users can send messages"
 
 -- Let Supabase Realtime stream new chat rows to connected clients.
 alter publication supabase_realtime add table public.chat_messages;
+
+-- Auto-create the profile row when someone signs up. Runs with elevated
+-- rights (security definer), so it isn't blocked by RLS even when there's no
+-- active client session yet (e.g. while email confirmation is pending).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, username)
+  values (new.id, coalesce(new.raw_user_meta_data->>'username', 'Рыболов'))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
