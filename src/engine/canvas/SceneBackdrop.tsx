@@ -30,6 +30,11 @@ export function SceneBackdrop() {
   const scene = location?.photoScene
   if (!scene) return null
 
+  // Don't paint any bucket at all until the real save is loaded — showing
+  // the 06:00 default guess and then swapping it out is exactly the flash
+  // this is meant to avoid, even without an animated transition.
+  if (!initialized) return <div className="absolute inset-0 -z-10 bg-black" />
+
   return (
     <div className="absolute inset-0 -z-10 overflow-hidden bg-black">
       {BUCKET_KEYS.map((key) => (
