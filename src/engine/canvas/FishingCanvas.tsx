@@ -4,6 +4,7 @@ import { getTimeOfDay } from '@/game/time/types'
 import { getSkyPalette, getLocationPalette } from '@/engine/canvas/sceneTheme'
 import { getLocationById } from '@/data/locations/locations'
 import type { RodSlot } from '@/game/fishing/types'
+import type { TimeOfDay } from '@/game/fish/types'
 
 const BANK_X = [0.24, 0.5, 0.76]
 
@@ -75,19 +76,24 @@ const REEL_ANIM_MS = 380
 const IVNYAK_ROD_IMG = new Image()
 IVNYAK_ROD_IMG.src = '/rods/ivnyak.png'
 const IVNYAK_HANDLE = { x: 28, y: 1348 }
-const IVNYAK_TIP = { x: 385, y: 8 }
+const IVNYAK_IMG_W = 394
+const IVNYAK_IMG_H = 1361
+// The line always attaches to the image's own top-right corner — the tip
+// guide sits right at that edge in both photos, so this stays exact
+// regardless of hand-picked pixel guesses.
+const IVNYAK_TIP = { x: IVNYAK_IMG_W, y: 0 }
 
 const IVNYAK_BITE_ROD_IMG = new Image()
 IVNYAK_BITE_ROD_IMG.src = '/rods/ivnyak-bite.png'
 const IVNYAK_BITE_HANDLE = { x: 700, y: 2850 }
-const IVNYAK_BITE_TIP = { x: 1845, y: 285 }
+const IVNYAK_BITE_IMG_W = 2170
+const IVNYAK_BITE_IMG_H = 2900
+const IVNYAK_BITE_TIP = { x: IVNYAK_BITE_IMG_W, y: 0 }
 
 const IVNYAK_SCALE_MULT = 4
 const IVNYAK_Y_OFFSET = 100
 
-function drawRodPolePhoto(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+function ivnyakPoleFit(
   handle: { x: number; y: number },
   tip: { x: number; y: number },
   anchorX: number,
@@ -101,12 +107,119 @@ function drawRodPolePhoto(
   const imgVecY = tip.y - handle.y
   const scale = Math.hypot(rodVecX, rodVecY) / Math.hypot(imgVecX, imgVecY)
   const rotation = Math.atan2(rodVecY, rodVecX) - Math.atan2(imgVecY, imgVecX)
+  return { scale, rotation }
+}
+
+// Centralized rod-photo lighting: every rod photo (current and future)
+// routes through drawRodPolePhoto, so tuning one table here re-grades all
+// of them consistently instead of each rod baking in its own look. A photo
+// pasted on top of the scene reads as fake; matching its brightness/
+// contrast/saturation and tinting it toward the ambient light color is what
+// sells it as standing in the same light as the sky/water behind it.
+interface RodTintLayer { color: string; alpha: number }
+interface RodLightingProfile { brightness: number; contrast: number; saturation: number; tints: RodTintLayer[] }
+
+const ROD_LIGHTING: Record<TimeOfDay, RodLightingProfile> = {
+  // Soft low sun — a faint warm key light with slightly blue-cool shadows.
+  dawn: {
+    brightness: 1.0, contrast: 0.97, saturation: 0.92,
+    tints: [
+      { color: '#ffcf9e', alpha: 0.10 },
+      { color: '#7fa4d6', alpha: 0.12 },
+    ],
+  },
+  // Neutral daylight — essentially untouched.
+  day: {
+    brightness: 1.0, contrast: 1.0, saturation: 1.0,
+    tints: [],
+  },
+  // Golden-hour key light over cool blue-violet shadow undertone.
+  dusk: {
+    brightness: 1.0, contrast: 1.02, saturation: 1.05,
+    tints: [
+      { color: '#e8823c', alpha: 0.24 },
+      { color: '#5a5ad2', alpha: 0.14 },
+    ],
+  },
+  // Cold, dim, low-contrast moonlight.
+  night: {
+    brightness: 0.6, contrast: 0.85, saturation: 0.7,
+    tints: [
+      { color: '#3f5f95', alpha: 0.32 },
+    ],
+  },
+}
+
+function drawRodPolePhoto(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  imgW: number,
+  imgH: number,
+  handle: { x: number; y: number },
+  tip: { x: number; y: number },
+  anchorX: number,
+  anchorY: number,
+  tipX: number,
+  tipY: number,
+  timeOfDay: TimeOfDay,
+) {
+  const { scale, rotation } = ivnyakPoleFit(handle, tip, anchorX, anchorY, tipX, tipY)
+  const lighting = ROD_LIGHTING[timeOfDay]
   ctx.save()
   ctx.translate(anchorX, anchorY)
   ctx.rotate(rotation)
   ctx.scale(scale, scale)
+  ctx.filter = `brightness(${lighting.brightness}) contrast(${lighting.contrast}) saturate(${lighting.saturation})`
   ctx.drawImage(img, -handle.x, -handle.y)
+  ctx.filter = 'none'
+  // Tint only the pixels the photo actually drew (source-atop respects its
+  // alpha channel), so the transparent margin around the rod stays clean and
+  // the wood-grain detail underneath still shows through the tint.
+  ctx.globalCompositeOperation = 'source-atop'
+  for (const layer of lighting.tints) {
+    ctx.globalAlpha = layer.alpha
+    ctx.fillStyle = layer.color
+    ctx.fillRect(-handle.x, -handle.y, imgW, imgH)
+  }
   ctx.restore()
+}
+
+// The Ивняк photo is rendered larger than the procedural rod and anchored
+// lower — everything that needs to know where the rod actually is on screen
+// (the line/float attach point, and click hit-testing) must use this same
+// effective anchor/tip, not the original vector-rod geometry.
+function ivnyakEffectiveGeometry(anchorX: number, anchorY: number, tipX: number, tipY: number, bentTipY: number) {
+  const poleAnchorX = anchorX
+  const poleAnchorY = anchorY + IVNYAK_Y_OFFSET
+  const effTipX = poleAnchorX + (tipX - anchorX) * IVNYAK_SCALE_MULT
+  const effTipY = poleAnchorY + (tipY - anchorY) * IVNYAK_SCALE_MULT
+  const effBentTipY = poleAnchorY + (bentTipY - anchorY) * IVNYAK_SCALE_MULT
+  return { poleAnchorX, poleAnchorY, effTipX, effTipY, effBentTipY }
+}
+
+// Hit-test a screen point against the photo's own rectangular bounds (not
+// just a thin line down its middle) by inverse-transforming the point back
+// into the image's local pixel space.
+function pointOnRodPhoto(
+  x: number,
+  y: number,
+  imgW: number,
+  imgH: number,
+  handle: { x: number; y: number },
+  tip: { x: number; y: number },
+  anchorX: number,
+  anchorY: number,
+  tipX: number,
+  tipY: number,
+): boolean {
+  const { scale, rotation } = ivnyakPoleFit(handle, tip, anchorX, anchorY, tipX, tipY)
+  const dx = x - anchorX
+  const dy = y - anchorY
+  const cos = Math.cos(-rotation)
+  const sin = Math.sin(-rotation)
+  const localX = (dx * cos - dy * sin) / scale + handle.x
+  const localY = (dx * sin + dy * cos) / scale + handle.y
+  return localX >= 0 && localX <= imgW && localY >= 0 && localY <= imgH
 }
 
 export function FishingCanvas() {
@@ -162,6 +275,23 @@ export function FishingCanvas() {
         const rodLen = H * 0.16
         const tipX = anchorX + Math.cos(tipAngle) * rodLen
         const tipY = anchorY + Math.sin(tipAngle) * rodLen
+
+        if (rod.loadout.rod?.id === 'rod_float_basic') {
+          const bend = rod.state === 'fight' ? Math.min(0.35, (rod.fight?.lineTension ?? 0) / 260) : rod.state === 'broken' ? 0.6 : 0.05
+          const bentTipY = tipY + bend * 34
+          const { poleAnchorX, poleAnchorY, effTipX, effBentTipY } = ivnyakEffectiveGeometry(anchorX, anchorY, tipX, tipY, bentTipY)
+          const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
+          const handle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
+          const tip = isBiteOrFight ? IVNYAK_BITE_TIP : IVNYAK_TIP
+          const imgW = isBiteOrFight ? IVNYAK_BITE_IMG_W : IVNYAK_IMG_W
+          const imgH = isBiteOrFight ? IVNYAK_BITE_IMG_H : IVNYAK_IMG_H
+          if (pointOnRodPhoto(x, y, imgW, imgH, handle, tip, poleAnchorX, poleAnchorY, effTipX, effBentTipY)) {
+            bestDist = 0
+            bestIndex = i
+            return
+          }
+        }
+
         const d = distanceToSegment(x, y, anchorX, anchorY, tipX, tipY)
         if (d < bestDist) {
           bestDist = d
@@ -391,7 +521,7 @@ export function FishingCanvas() {
           reelAnims.delete(i)
         }
 
-        drawRod(ctx, rod, i === store.activeRodIndex, BANK_X[i] * W, bankTop + (bankBottom - bankTop) * 0.4, W, H, horizonY, bankTop, t, reelAnims.get(i))
+        drawRod(ctx, rod, i === store.activeRodIndex, BANK_X[i] * W, bankTop + (bankBottom - bankTop) * 0.4, W, H, horizonY, bankTop, t, timeOfDay, reelAnims.get(i))
       })
 
       // Rain
@@ -633,6 +763,7 @@ function drawRod(
   horizonY: number,
   bankY: number,
   t: number,
+  timeOfDay: TimeOfDay,
   reelAnim?: ReelAnim,
 ) {
   const color = rodStrokeColor(rod.state, active)
@@ -643,51 +774,28 @@ function drawRod(
   const tipX = anchorX + Math.cos(tipAngle) * rodLen
   const tipY = anchorY + Math.sin(tipAngle) * rodLen
 
-  if (active) {
-    ctx.save()
-    ctx.globalAlpha = 0.5
-    ctx.fillStyle = '#ffe9a8'
-    ctx.beginPath()
-    ctx.ellipse(anchorX, anchorY + 6, 22, 8, 0, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
-  }
-
-  // Holder stand
-  ctx.strokeStyle = '#3b2a1c'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(anchorX - 8, anchorY + 14)
-  ctx.lineTo(anchorX, anchorY)
-  ctx.lineTo(anchorX + 8, anchorY + 14)
-  ctx.stroke()
-
   // Rod pole
   const bend = rod.state === 'fight' ? Math.min(0.35, (rod.fight?.lineTension ?? 0) / 260) : rod.state === 'broken' ? 0.6 : 0.05
   const bentTipY = tipY + bend * 34
   const isIvnyak = rod.loadout.rod?.id === 'rod_float_basic'
 
-  // The Ивняк photo is rendered larger than the procedural rod and anchored
-  // lower — everything downstream (line, float, fish) must attach to where
-  // its tip actually ends up on screen, not the original vector-rod point.
   let poleAnchorX = anchorX
   let poleAnchorY = anchorY
   let effTipX = tipX
   let effTipY = tipY
   let effBentTipY = bentTipY
   if (isIvnyak) {
-    poleAnchorY = anchorY + IVNYAK_Y_OFFSET
-    effTipX = poleAnchorX + (tipX - anchorX) * IVNYAK_SCALE_MULT
-    effTipY = poleAnchorY + (tipY - anchorY) * IVNYAK_SCALE_MULT
-    effBentTipY = poleAnchorY + (bentTipY - anchorY) * IVNYAK_SCALE_MULT
+    ;({ poleAnchorX, poleAnchorY, effTipX, effTipY, effBentTipY } = ivnyakEffectiveGeometry(anchorX, anchorY, tipX, tipY, bentTipY))
   }
 
   const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
   const ivnyakImg = isBiteOrFight ? IVNYAK_BITE_ROD_IMG : IVNYAK_ROD_IMG
   const ivnyakHandle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
   const ivnyakTip = isBiteOrFight ? IVNYAK_BITE_TIP : IVNYAK_TIP
+  const ivnyakImgW = isBiteOrFight ? IVNYAK_BITE_IMG_W : IVNYAK_IMG_W
+  const ivnyakImgH = isBiteOrFight ? IVNYAK_BITE_IMG_H : IVNYAK_IMG_H
   if (isIvnyak && ivnyakImg.complete && ivnyakImg.naturalWidth > 0) {
-    drawRodPolePhoto(ctx, ivnyakImg, ivnyakHandle, ivnyakTip, poleAnchorX, poleAnchorY, effTipX, effBentTipY)
+    drawRodPolePhoto(ctx, ivnyakImg, ivnyakImgW, ivnyakImgH, ivnyakHandle, ivnyakTip, poleAnchorX, poleAnchorY, effTipX, effBentTipY, timeOfDay)
   } else {
     ctx.strokeStyle = color
     ctx.lineWidth = 4
