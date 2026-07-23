@@ -23,6 +23,7 @@ interface NetworkState {
   resendConfirmation: (email: string) => Promise<boolean>
   login: (email: string, password: string) => Promise<boolean>
   logout: () => Promise<void>
+  renameUsername: (name: string) => Promise<boolean>
   sendMessage: (text: string) => Promise<void>
   refreshLeaderboard: () => Promise<void>
   pushProfileStats: (patch: Partial<ProfileRow>) => Promise<void>
@@ -101,6 +102,20 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
 
   logout: async () => {
     await signOut()
+  },
+
+  renameUsername: async (name) => {
+    const trimmed = name.trim()
+    if (trimmed.length < 2 || trimmed.length > 24) {
+      set({ authError: 'Ник должен быть от 2 до 24 символов.' })
+      return false
+    }
+    const { session, profile } = get()
+    if (!session) return false
+    await upsertProfileStats(session.user.id, { username: trimmed })
+    useGameStore.getState().setPlayerName(trimmed)
+    set({ profile: profile ? { ...profile, username: trimmed } : profile, authError: null })
+    return true
   },
 
   sendMessage: async (text) => {

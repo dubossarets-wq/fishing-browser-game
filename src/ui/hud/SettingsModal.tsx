@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useUiStore } from '@/app/uiStore'
 import { useGameStore } from '@/app/store'
+import { useNetworkStore } from '@/app/networkStore'
 import { soundManager } from '@/engine/audio/soundManager'
 import { Button, Panel } from '@/ui/common/Panel'
 
@@ -13,10 +14,17 @@ export function SettingsModal() {
   const toggleMuted = useUiStore((s) => s.toggleMuted)
   const isAdmin = useGameStore((s) => s.admin.isAdmin)
   const unlockAdmin = useGameStore((s) => s.unlockAdmin)
+  const status = useNetworkStore((s) => s.status)
+  const profile = useNetworkStore((s) => s.profile)
+  const renameUsername = useNetworkStore((s) => s.renameUsername)
+  const authError = useNetworkStore((s) => s.authError)
 
   const [devOpen, setDevOpen] = useState(false)
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState(false)
+  const [nickname, setNickname] = useState(profile?.username ?? '')
+  const [nickBusy, setNickBusy] = useState(false)
+  const [nickSaved, setNickSaved] = useState(false)
 
   const submitCode = () => {
     if (unlockAdmin(code.trim())) {
@@ -26,6 +34,14 @@ export function SettingsModal() {
     } else {
       setCodeError(true)
     }
+  }
+
+  const submitNickname = async () => {
+    setNickBusy(true)
+    setNickSaved(false)
+    const ok = await renameUsername(nickname)
+    setNickSaved(ok)
+    setNickBusy(false)
   }
 
   return (
@@ -57,6 +73,31 @@ export function SettingsModal() {
             <span className="text-sm font-semibold">Без звука</span>
             <input type="checkbox" checked={muted} onChange={toggleMuted} className="w-4 h-4 accent-brass-500" />
           </label>
+
+          {status === 'online' && (
+            <div className="mt-4 pt-3 border-t border-black/10">
+              <label className="text-sm font-semibold">Ник рыболова</label>
+              <div className="flex gap-1.5 mt-1">
+                <input
+                  value={nickname}
+                  onChange={(e) => { setNickname(e.target.value); setNickSaved(false) }}
+                  onKeyDown={(e) => e.key === 'Enter' && void submitNickname()}
+                  placeholder="Ваш ник"
+                  maxLength={24}
+                  className="flex-1 text-sm px-2 py-1.5 rounded-sm border border-black/10 bg-black/5 outline-none"
+                />
+                <button
+                  disabled={nickBusy || !nickname.trim() || nickname.trim() === profile?.username}
+                  onClick={() => void submitNickname()}
+                  className="text-xs px-3 py-1.5 rounded-sm bg-lake-600 text-white hover:brightness-110 disabled:opacity-30"
+                >
+                  Сохранить
+                </button>
+              </div>
+              {authError && <div className="text-xs text-ember-500 mt-1">{authError}</div>}
+              {nickSaved && <div className="text-xs text-moss-500 mt-1">Ник обновлён.</div>}
+            </div>
+          )}
 
           <Button className="mt-5 w-full" onClick={closeModal}>Готово</Button>
 
