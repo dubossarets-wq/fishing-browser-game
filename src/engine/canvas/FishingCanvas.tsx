@@ -10,17 +10,20 @@ const BANK_X = [0.24, 0.5, 0.76]
 
 // Castable area of the water: full width minus a fixed side margin (so the
 // float can never land under the sidebar or right at the canvas edge), and
-// vertically bounded by the scene's own horizon/near-shore lines — the real
-// edges of the projected water, not an arbitrary pixel value. Tune the
-// margin here; everything that resolves a click/drag to a cast target
-// clamps through this first.
+// vertically from the horizon down to almost the very bottom of the canvas
+// (a small margin so it never lands literally on the last pixel row) — the
+// visible water now fills the whole frame down to the dock, not just the
+// old near-shore band, so the clickable zone should match what's on screen.
+// Tune either margin here; everything that resolves a click/drag to a cast
+// target clamps through this first.
 const CAST_ZONE_MARGIN_X = 100
+const CAST_ZONE_BOTTOM_MARGIN = 20
 
-function clampToCastZone(x: number, y: number, W: number, horizonY: number, bankY: number) {
+function clampToCastZone(x: number, y: number, W: number, H: number, horizonY: number) {
   const minX = Math.min(CAST_ZONE_MARGIN_X, W / 2)
   const maxX = Math.max(W - CAST_ZONE_MARGIN_X, W / 2)
-  const top = Math.min(horizonY, bankY)
-  const bottom = Math.max(horizonY, bankY)
+  const top = Math.min(horizonY, H)
+  const bottom = Math.max(horizonY, H - CAST_ZONE_BOTTOM_MARGIN)
   return {
     x: Math.min(maxX, Math.max(minX, x)),
     y: Math.min(bottom, Math.max(top, y)),
@@ -106,12 +109,16 @@ function findTipFromAlpha(img: HTMLImageElement, tip: { x: number; y: number }) 
       if (!octx) return
       octx.drawImage(img, 0, 0)
       const { data } = octx.getImageData(0, 0, w, h)
+      // Solidly opaque only — a faint anti-aliased fringe can extend a few
+      // px past where the tip visually reads as "there", which would leave
+      // the line anchored just outside the rod's actual visible pixels.
+      const ALPHA_MIN = 140
       const alphaAt = (x: number, y: number) => data[(y * w + x) * 4 + 3]
 
       let topY = -1
       for (let y = 0; y < h && topY < 0; y++) {
         for (let x = w - 1; x >= 0; x--) {
-          if (alphaAt(x, y) > 20) {
+          if (alphaAt(x, y) > ALPHA_MIN) {
             topY = y
             break
           }
@@ -119,10 +126,13 @@ function findTipFromAlpha(img: HTMLImageElement, tip: { x: number; y: number }) 
       }
       if (topY < 0) return
 
+      // Narrow band right at the top — wide enough to survive a couple of
+      // rows of anti-aliasing, narrow enough not to drift down onto the
+      // shaft where it starts curving away from the true tip.
       let rightX = -1
-      for (let y = topY; y < Math.min(h, topY + 24); y++) {
+      for (let y = topY; y < Math.min(h, topY + 6); y++) {
         for (let x = w - 1; x >= 0; x--) {
-          if (alphaAt(x, y) > 20) {
+          if (alphaAt(x, y) > ALPHA_MIN) {
             if (x > rightX) rightX = x
             break
           }
@@ -403,8 +413,8 @@ export function FishingCanvas() {
       const rect = canvas.getBoundingClientRect()
       const rawX = clientX - rect.left
       const rawY = clientY - rect.top
-      const { W, horizonY, bankTop } = sceneGeometry()
-      const { x, y } = clampToCastZone(rawX, rawY, W, horizonY, bankTop)
+      const { W, H, horizonY, bankTop } = sceneGeometry()
+      const { x, y } = clampToCastZone(rawX, rawY, W, H, horizonY)
       const store = useGameStore.getState()
       const location = getLocationById(store.currentLocationId)
       const maxDistance = location ? location.depthProfile[location.depthProfile.length - 1].distance : 100
