@@ -8,6 +8,25 @@ import type { TimeOfDay } from '@/game/fish/types'
 
 const BANK_X = [0.24, 0.5, 0.76]
 
+// Castable area of the water: full width minus a fixed side margin (so the
+// float can never land under the sidebar or right at the canvas edge), and
+// vertically bounded by the scene's own horizon/near-shore lines — the real
+// edges of the projected water, not an arbitrary pixel value. Tune the
+// margin here; everything that resolves a click/drag to a cast target
+// clamps through this first.
+const CAST_ZONE_MARGIN_X = 100
+
+function clampToCastZone(x: number, y: number, W: number, horizonY: number, bankY: number) {
+  const minX = Math.min(CAST_ZONE_MARGIN_X, W / 2)
+  const maxX = Math.max(W - CAST_ZONE_MARGIN_X, W / 2)
+  const top = Math.min(horizonY, bankY)
+  const bottom = Math.max(horizonY, bankY)
+  return {
+    x: Math.min(maxX, Math.max(minX, x)),
+    y: Math.min(bottom, Math.max(top, y)),
+  }
+}
+
 function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3)
 }
@@ -68,6 +87,60 @@ interface ReelAnim {
 
 const REEL_ANIM_MS = 380
 
+// The line must attach exactly where the rod's tip actually is in the photo,
+// not just wherever the image file happens to end — a diagonal cutout rod
+// almost never reaches the literal top-right pixel of its own bounding box,
+// so anchoring there leaves the line visibly floating off the tip. Instead,
+// once each image loads, scan its alpha channel for the topmost opaque row
+// and the rightmost opaque pixel near it — that's the real tip, at the
+// photo's own top-right edge — and use that as the anchor from then on.
+function findTipFromAlpha(img: HTMLImageElement, tip: { x: number; y: number }) {
+  const scan = () => {
+    try {
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const off = document.createElement('canvas')
+      off.width = w
+      off.height = h
+      const octx = off.getContext('2d', { willReadFrequently: true })
+      if (!octx) return
+      octx.drawImage(img, 0, 0)
+      const { data } = octx.getImageData(0, 0, w, h)
+      const alphaAt = (x: number, y: number) => data[(y * w + x) * 4 + 3]
+
+      let topY = -1
+      for (let y = 0; y < h && topY < 0; y++) {
+        for (let x = w - 1; x >= 0; x--) {
+          if (alphaAt(x, y) > 20) {
+            topY = y
+            break
+          }
+        }
+      }
+      if (topY < 0) return
+
+      let rightX = -1
+      for (let y = topY; y < Math.min(h, topY + 24); y++) {
+        for (let x = w - 1; x >= 0; x--) {
+          if (alphaAt(x, y) > 20) {
+            if (x > rightX) rightX = x
+            break
+          }
+        }
+      }
+      if (rightX < 0) return
+
+      tip.x = rightX
+      tip.y = topY
+    } catch {
+      // Canvas read failed (e.g. file:// during local dev without a server) —
+      // keep whatever fallback tip was set and move on.
+    }
+  }
+  if (img.complete) scan()
+  else img.addEventListener('load', scan, { once: true })
+}
+
 // "Ивняк" (rod_float_basic) is rendered from real photos instead of the
 // procedural stroke — a straight one for idle/waiting, and an already-bent
 // one for an actual bite/fight (its curve is baked into the photo, not
@@ -78,17 +151,16 @@ IVNYAK_ROD_IMG.src = '/rods/ivnyak.png'
 const IVNYAK_HANDLE = { x: 28, y: 1348 }
 const IVNYAK_IMG_W = 394
 const IVNYAK_IMG_H = 1361
-// The line always attaches to the image's own top-right corner — the tip
-// guide sits right at that edge in both photos, so this stays exact
-// regardless of hand-picked pixel guesses.
-const IVNYAK_TIP = { x: IVNYAK_IMG_W, y: 0 }
+const IVNYAK_TIP = { x: IVNYAK_IMG_W, y: 0 } // refined below once the photo loads
+findTipFromAlpha(IVNYAK_ROD_IMG, IVNYAK_TIP)
 
 const IVNYAK_BITE_ROD_IMG = new Image()
 IVNYAK_BITE_ROD_IMG.src = '/rods/ivnyak-bite.png'
 const IVNYAK_BITE_HANDLE = { x: 700, y: 2850 }
 const IVNYAK_BITE_IMG_W = 2170
 const IVNYAK_BITE_IMG_H = 2900
-const IVNYAK_BITE_TIP = { x: IVNYAK_BITE_IMG_W, y: 0 }
+const IVNYAK_BITE_TIP = { x: IVNYAK_BITE_IMG_W, y: 0 } // refined below once the photo loads
+findTipFromAlpha(IVNYAK_BITE_ROD_IMG, IVNYAK_BITE_TIP)
 
 const IVNYAK_SCALE_MULT = 4
 const IVNYAK_Y_OFFSET = 100
@@ -122,10 +194,10 @@ interface RodLightingProfile { brightness: number; contrast: number; saturation:
 const ROD_LIGHTING: Record<TimeOfDay, RodLightingProfile> = {
   // Soft low sun — a faint warm key light with slightly blue-cool shadows.
   dawn: {
-    brightness: 1.0, contrast: 0.97, saturation: 0.92,
+    brightness: 1.0, contrast: 0.99, saturation: 0.96,
     tints: [
-      { color: '#ffcf9e', alpha: 0.10 },
-      { color: '#7fa4d6', alpha: 0.12 },
+      { color: '#ffcf9e', alpha: 0.05 },
+      { color: '#7fa4d6', alpha: 0.06 },
     ],
   },
   // Neutral daylight — essentially untouched.
@@ -135,19 +207,56 @@ const ROD_LIGHTING: Record<TimeOfDay, RodLightingProfile> = {
   },
   // Golden-hour key light over cool blue-violet shadow undertone.
   dusk: {
-    brightness: 1.0, contrast: 1.02, saturation: 1.05,
+    brightness: 1.0, contrast: 1.01, saturation: 1.02,
     tints: [
-      { color: '#e8823c', alpha: 0.24 },
-      { color: '#5a5ad2', alpha: 0.14 },
+      { color: '#e8823c', alpha: 0.12 },
+      { color: '#5a5ad2', alpha: 0.07 },
     ],
   },
   // Cold, dim, low-contrast moonlight.
   night: {
-    brightness: 0.6, contrast: 0.85, saturation: 0.7,
+    brightness: 0.78, contrast: 0.93, saturation: 0.85,
     tints: [
-      { color: '#3f5f95', alpha: 0.32 },
+      { color: '#3f5f95', alpha: 0.16 },
     ],
   },
+}
+
+// Tinting has to be isolated to an offscreen canvas containing only the rod's
+// own pixels — applying source-atop directly on the main canvas would mask
+// against whatever's already painted behind it (sky, water, other rods),
+// tinting a big rectangle of the background instead of just the rod. Cached
+// per (image, timeOfDay) since there are only 4 buckets and the source
+// photos never change, so this isn't redone every frame.
+const rodPhotoTintCache = new Map<string, HTMLCanvasElement>()
+
+function getTintedRodPhoto(img: HTMLImageElement, imgW: number, imgH: number, timeOfDay: TimeOfDay): HTMLCanvasElement | null {
+  if (!img.complete || img.naturalWidth === 0) return null
+  const key = `${img.src}:${timeOfDay}`
+  const cached = rodPhotoTintCache.get(key)
+  if (cached) return cached
+
+  const offscreen = document.createElement('canvas')
+  offscreen.width = imgW
+  offscreen.height = imgH
+  const octx = offscreen.getContext('2d')
+  if (!octx) return null
+
+  const lighting = ROD_LIGHTING[timeOfDay]
+  octx.filter = `brightness(${lighting.brightness}) contrast(${lighting.contrast}) saturate(${lighting.saturation})`
+  octx.drawImage(img, 0, 0, imgW, imgH)
+  octx.filter = 'none'
+  octx.globalCompositeOperation = 'source-atop'
+  for (const layer of lighting.tints) {
+    octx.globalAlpha = layer.alpha
+    octx.fillStyle = layer.color
+    octx.fillRect(0, 0, imgW, imgH)
+  }
+  octx.globalAlpha = 1
+  octx.globalCompositeOperation = 'source-over'
+
+  rodPhotoTintCache.set(key, offscreen)
+  return offscreen
 }
 
 function drawRodPolePhoto(
@@ -164,23 +273,12 @@ function drawRodPolePhoto(
   timeOfDay: TimeOfDay,
 ) {
   const { scale, rotation } = ivnyakPoleFit(handle, tip, anchorX, anchorY, tipX, tipY)
-  const lighting = ROD_LIGHTING[timeOfDay]
+  const tinted = getTintedRodPhoto(img, imgW, imgH, timeOfDay)
   ctx.save()
   ctx.translate(anchorX, anchorY)
   ctx.rotate(rotation)
   ctx.scale(scale, scale)
-  ctx.filter = `brightness(${lighting.brightness}) contrast(${lighting.contrast}) saturate(${lighting.saturation})`
-  ctx.drawImage(img, -handle.x, -handle.y)
-  ctx.filter = 'none'
-  // Tint only the pixels the photo actually drew (source-atop respects its
-  // alpha channel), so the transparent margin around the rod stays clean and
-  // the wood-grain detail underneath still shows through the tint.
-  ctx.globalCompositeOperation = 'source-atop'
-  for (const layer of lighting.tints) {
-    ctx.globalAlpha = layer.alpha
-    ctx.fillStyle = layer.color
-    ctx.fillRect(-handle.x, -handle.y, imgW, imgH)
-  }
+  ctx.drawImage(tinted ?? img, -handle.x, -handle.y)
   ctx.restore()
 }
 
@@ -303,9 +401,10 @@ export function FishingCanvas() {
 
     const waterTargetAt = (clientX: number, clientY: number) => {
       const rect = canvas.getBoundingClientRect()
-      const x = clientX - rect.left
-      const y = clientY - rect.top
+      const rawX = clientX - rect.left
+      const rawY = clientY - rect.top
       const { W, horizonY, bankTop } = sceneGeometry()
+      const { x, y } = clampToCastZone(rawX, rawY, W, horizonY, bankTop)
       const store = useGameStore.getState()
       const location = getLocationById(store.currentLocationId)
       const maxDistance = location ? location.depthProfile[location.depthProfile.length - 1].distance : 100
