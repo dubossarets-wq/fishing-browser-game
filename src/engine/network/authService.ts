@@ -18,6 +18,13 @@ export async function signUp(email: string, password: string, username: string):
   return { ok: true }
 }
 
+export async function resendConfirmation(email: string): Promise<AuthResult> {
+  if (!supabase) return { ok: false, error: 'Онлайн-режим не настроен (нет ключей Supabase).' }
+  const { error } = await supabase.auth.resend({ type: 'signup', email })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}
+
 export async function signIn(email: string, password: string): Promise<AuthResult> {
   if (!supabase) return { ok: false, error: 'Онлайн-режим не настроен (нет ключей Supabase).' }
   const { error } = await supabase.auth.signInWithPassword({ email, password })

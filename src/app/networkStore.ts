@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured } from '@/engine/network/supabaseClient'
-import { signIn, signUp, signOut, getSession, onAuthStateChange, fetchProfile, upsertProfileStats, fetchLeaderboard } from '@/engine/network/authService'
+import { signIn, signUp, signOut, getSession, onAuthStateChange, fetchProfile, upsertProfileStats, fetchLeaderboard, resendConfirmation } from '@/engine/network/authService'
 import { fetchRecentMessages, sendChatMessageRemote, subscribeToChat } from '@/engine/network/chatService'
 import { joinPresence, type PresenceInfo } from '@/engine/network/presenceService'
 import type { ChatMessageRow, ProfileRow } from '@/engine/network/supabaseClient'
@@ -19,6 +19,7 @@ interface NetworkState {
 
   init: () => Promise<void>
   register: (email: string, password: string, username: string) => Promise<boolean>
+  resendConfirmation: (email: string) => Promise<boolean>
   login: (email: string, password: string) => Promise<boolean>
   logout: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
@@ -69,6 +70,16 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     const res = await signUp(email, password, username)
     if (!res.ok) {
       set({ authError: res.error ?? 'Не удалось зарегистрироваться' })
+      return false
+    }
+    set({ authError: null })
+    return true
+  },
+
+  resendConfirmation: async (email) => {
+    const res = await resendConfirmation(email)
+    if (!res.ok) {
+      set({ authError: res.error ?? 'Не удалось отправить письмо повторно' })
       return false
     }
     set({ authError: null })

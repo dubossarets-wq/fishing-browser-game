@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNetworkStore } from '@/app/networkStore'
 import { useUiStore } from '@/app/uiStore'
 import { Button, Panel } from '@/ui/common/Panel'
@@ -8,6 +8,7 @@ export function AuthModal() {
   const status = useNetworkStore((s) => s.status)
   const authError = useNetworkStore((s) => s.authError)
   const register = useNetworkStore((s) => s.register)
+  const resendConfirmation = useNetworkStore((s) => s.resendConfirmation)
   const login = useNetworkStore((s) => s.login)
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -16,6 +17,13 @@ export function AuthModal() {
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
   const [info, setInfo] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => setResendCooldown((s) => Math.max(0, s - 1)), 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   if (status === 'unconfigured') {
     return (
@@ -46,7 +54,20 @@ export function AuthModal() {
       if (ok) closeModal()
     } else {
       const ok = await register(email, password, username || 'Рыболов')
-      if (ok) setInfo('Проверьте почту для подтверждения, затем войдите.')
+      if (ok) {
+        setInfo('Проверьте почту для подтверждения, затем войдите.')
+        setResendCooldown(30)
+      }
+    }
+    setBusy(false)
+  }
+
+  const resend = async () => {
+    setBusy(true)
+    const ok = await resendConfirmation(email)
+    if (ok) {
+      setInfo('Письмо отправлено повторно — проверьте почту.')
+      setResendCooldown(30)
     }
     setBusy(false)
   }
@@ -79,6 +100,16 @@ export function AuthModal() {
 
           {authError && <div className="text-xs text-ember-500 mt-2">{authError}</div>}
           {info && <div className="text-xs text-moss-500 mt-2">{info}</div>}
+
+          {mode === 'register' && info && (
+            <button
+              className="text-xs opacity-70 hover:opacity-100 underline mt-2 disabled:opacity-30 disabled:no-underline"
+              disabled={busy || resendCooldown > 0}
+              onClick={() => void resend()}
+            >
+              {resendCooldown > 0 ? `Отправить код ещё раз (${resendCooldown}с)` : 'Отправить код ещё раз'}
+            </button>
+          )}
 
           <Button className="w-full mt-4" disabled={busy || !email || !password} onClick={() => void submit()}>
             {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
