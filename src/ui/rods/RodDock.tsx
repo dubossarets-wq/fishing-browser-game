@@ -117,9 +117,6 @@ export function RodDock() {
           </>
         )}
 
-        {rod.state === 'waiting' && rod.biteStage === 'none' && (
-          <div className="text-xs text-paper-300 italic">Ждём поклёвку… ({Math.round(rod.waitTimeMs / 1000)} с)</div>
-        )}
         {rod.state === 'waiting' && (rod.biteStage === 'interested' || rod.biteStage === 'nibble') && (
           <div className="text-xs text-brass-400 font-semibold">Рыба у наживки…</div>
         )}

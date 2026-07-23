@@ -140,6 +140,29 @@ export function FishingCanvas() {
       return unprojectWaterPoint(x, y, W, horizonY, bankTop, maxDistance)
     }
 
+    // Hit-test the floating bobber itself (out on the water), separate from
+    // rodPoleAt which only tests the rod near the bank — lets a bite be
+    // struck by clicking the float directly, not just the "ПОДСЕЧКА" button.
+    const floatAt = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect()
+      const x = clientX - rect.left
+      const y = clientY - rect.top
+      const { W, horizonY, bankTop } = sceneGeometry()
+      const store = useGameStore.getState()
+      let bestIndex = -1
+      let bestDist = Infinity
+      store.rods.forEach((rod, i) => {
+        if (rod.state !== 'waiting' || rod.waitTimeMs < CAST_FLIGHT_MS) return
+        const water = projectWaterPoint(rod.castDistance, rod.castAngle, W, horizonY, bankTop)
+        const d = Math.hypot(x - water.x, y - water.y)
+        if (d < bestDist) {
+          bestDist = d
+          bestIndex = i
+        }
+      })
+      return bestDist < 18 ? bestIndex : -1
+    }
+
     const handlePointerDown = (e: PointerEvent) => {
       const rodIndex = rodPoleAt(e.clientX, e.clientY)
       const store = useGameStore.getState()
@@ -155,7 +178,17 @@ export function FishingCanvas() {
         return
       }
 
-      // Not on a rod — a single click just aims the active rod at the clicked water spot.
+      const floatIndex = floatAt(e.clientX, e.clientY)
+      if (floatIndex >= 0) {
+        const rod = store.rods[floatIndex]
+        store.setActiveRod(floatIndex as 0 | 1 | 2)
+        if (rod.biteStage === 'strong-bite') {
+          store.strike(floatIndex as 0 | 1 | 2)
+        }
+        return
+      }
+
+      // Not on a rod or float — a single click just aims the active rod at the clicked water spot.
       const active = store.activeRodIndex
       const activeRod = store.rods[active]
       if (activeRod.state !== 'idle' && activeRod.state !== 'setup' && activeRod.state !== 'ready') return
@@ -179,7 +212,7 @@ export function FishingCanvas() {
     }
 
     const handlePointerMove = (e: PointerEvent) => {
-      canvas.style.cursor = rodPoleAt(e.clientX, e.clientY) >= 0 ? 'pointer' : 'crosshair'
+      canvas.style.cursor = rodPoleAt(e.clientX, e.clientY) >= 0 || floatAt(e.clientX, e.clientY) >= 0 ? 'pointer' : 'crosshair'
     }
     canvas.addEventListener('pointerdown', handlePointerDown)
     canvas.addEventListener('dblclick', handleDoubleClick)

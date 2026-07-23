@@ -40,6 +40,19 @@ export function FightOverlay() {
   if (rod.state !== 'fight' || !rod.fight) return null
   const tensionDanger = rod.fight.lineTension > 80
 
+  // Hold-while-pressed controls: track the release on window rather than
+  // onPointerLeave, so dragging the cursor off the button (or out of the
+  // browser window entirely) while still holding the mouse button doesn't
+  // cancel reeling — only actually releasing the button does.
+  const holdWhilePressed = (patch: { reeling?: boolean; giveLine?: boolean }, releasePatch: { reeling?: boolean; giveLine?: boolean }) => {
+    setFightInput(activeRodIndex, patch)
+    const onUp = () => {
+      setFightInput(activeRodIndex, releasePatch)
+      window.removeEventListener('pointerup', onUp)
+    }
+    window.addEventListener('pointerup', onUp)
+  }
+
   const onWheelDrag = (e: WheelEvent) => {
     e.preventDefault()
     const step = e.deltaY < 0 ? 3 : -3
@@ -70,18 +83,14 @@ export function FightOverlay() {
           />
           <div className="flex gap-2">
             <button
-              onPointerDown={() => setFightInput(activeRodIndex, { reeling: true, giveLine: false })}
-              onPointerUp={() => setFightInput(activeRodIndex, { reeling: false })}
-              onPointerLeave={() => setFightInput(activeRodIndex, { reeling: false })}
+              onPointerDown={() => holdWhilePressed({ reeling: true, giveLine: false }, { reeling: false })}
               className={`flex-1 py-2 rounded-sm text-sm font-semibold select-none flex items-center justify-center gap-1.5 ${fightInput.reeling ? 'bg-brass-500 text-wood-950' : 'btn-brass'}`}
             >
               <ReelIcon spinning={fightInput.reeling} />
               Подматывать
             </button>
             <button
-              onPointerDown={() => setFightInput(activeRodIndex, { giveLine: true, reeling: false })}
-              onPointerUp={() => setFightInput(activeRodIndex, { giveLine: false })}
-              onPointerLeave={() => setFightInput(activeRodIndex, { giveLine: false })}
+              onPointerDown={() => holdWhilePressed({ giveLine: true, reeling: false }, { giveLine: false })}
               className={`flex-1 py-2 rounded-sm text-sm font-semibold select-none border border-paper-300/30 ${fightInput.giveLine ? 'bg-lake-600 text-paper-100' : 'bg-black/25 text-paper-100 hover:bg-black/40'}`}
             >
               Отпустить леску
