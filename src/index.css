@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  --color-wood-950: #241812;
+  --color-wood-900: #33231a;
+  --color-wood-800: #4a3324;
+  --color-wood-700: #63452f;
+  --color-wood-600: #7c5738;
+  --color-paper-100: #f4ecd8;
+  --color-paper-200: #ece0c4;
+  --color-paper-300: #ded0ac;
+  --color-paper-ink: #2c2418;
+  --color-brass-400: #c9a24b;
+  --color-brass-500: #b3893a;
+  --color-lake-400: #4f8fa6;
+  --color-lake-600: #2c5f73;
+  --color-ember-500: #c0532f;
+  --color-moss-500: #5a7c4a;
+  --font-display: "Georgia", "Times New Roman", serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background: var(--color-wood-950);
+  color: var(--color-paper-100);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-wood-600);
+  border-radius: 4px;
+}
+
+.panel-wood {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.12)),
+    repeating-linear-gradient(90deg, var(--color-wood-800) 0px, var(--color-wood-700) 2px, var(--color-wood-800) 4px);
+  border: 1px solid var(--color-wood-950);
+}
+
+.panel-paper {
+  background: linear-gradient(180deg, var(--color-paper-100), var(--color-paper-200));
+  color: var(--color-paper-ink);
+  border: 1px solid var(--color-paper-300);
+}
+
+.btn-brass {
+  background: linear-gradient(180deg, var(--color-brass-400), var(--color-brass-500));
+  color: #241808;
+  border: 1px solid #7a5c1f;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 3px rgba(0,0,0,0.3);
+}
+.btn-brass:hover { filter: brightness(1.08); }
+.btn-brass:active { filter: brightness(0.92); transform: translateY(1px); }
+.btn-brass:disabled { filter: grayscale(0.6) brightness(0.7); cursor: not-allowed; }
+
+@keyframes float-bob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(3px); }
+}
+.animate-float-bob {
+  animation: float-bob 2.2s ease-in-out infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.animate-pulse-red {
+  animation: pulse-red 0.6s ease-in-out infinite;
+}

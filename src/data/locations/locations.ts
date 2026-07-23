@@ -1,0 +1,92 @@
+import type { LocationDefinition } from '@/game/locations/types'
+
+export const LOCATIONS: LocationDefinition[] = [
+  {
+    id: 'clay_bend',
+    name: 'Глинистый плёс',
+    description: 'Спокойная заводь у глинистого обрыва. Хорошее место для новичков: мирная рыба держится у берега, изредка заходит хищник.',
+    backgroundImage: '/scenes/clay_bend.svg',
+    ambientSound: 'river',
+    depthProfile: [
+      { distance: 0, depth: 0.3, bottom: 'sand' },
+      { distance: 8, depth: 1.0, bottom: 'sand' },
+      { distance: 15, depth: 1.8, bottom: 'silt' },
+      { distance: 25, depth: 2.6, bottom: 'silt' },
+      { distance: 35, depth: 2.2, bottom: 'grass' },
+      { distance: 45, depth: 3.4, bottom: 'snags' },
+      { distance: 60, depth: 4.5, bottom: 'rocks' },
+      { distance: 80, depth: 5.2, bottom: 'silt' },
+      { distance: 100, depth: 4.0, bottom: 'sand' },
+    ],
+    spots: [
+      { id: 'shore_shallow', name: 'Прибрежная отмель', distance: 8, angle: -0.6, activityMultiplier: 0.9 },
+      { id: 'silt_flat', name: 'Илистый полив', distance: 25, angle: -0.1, activityMultiplier: 1.2 },
+      { id: 'grass_edge', name: 'Кромка травы', distance: 35, angle: 0.3, activityMultiplier: 1.1 },
+      { id: 'snag_hole', name: 'Коряжник', distance: 45, angle: 0.6, activityMultiplier: 1.3 },
+      { id: 'deep_channel', name: 'Глубокий жёлоб', distance: 80, angle: 0, activityMultiplier: 1.0 },
+    ],
+    fishSpeciesIds: ['crucian', 'roach', 'rudd', 'bream', 'tench', 'perch', 'pike'],
+    weatherProfile: ['clear', 'cloudy', 'rain', 'fog'],
+    unlockLevel: 1,
+    travelCost: 0,
+    licensePerDay: 150,
+    maxAnglers: 12,
+  },
+  {
+    id: 'stone_reservoir',
+    name: 'Каменное водохранилище',
+    description: 'Обширный водоём с каменистыми грядами и глубокими свалами. Дом для судака и крупного окуня.',
+    backgroundImage: '/scenes/stone_reservoir.svg',
+    ambientSound: 'lake',
+    depthProfile: [
+      { distance: 0, depth: 0.6, bottom: 'rocks' },
+      { distance: 10, depth: 2.0, bottom: 'rocks' },
+      { distance: 20, depth: 3.5, bottom: 'sand' },
+      { distance: 35, depth: 5.5, bottom: 'sand' },
+      { distance: 50, depth: 7.2, bottom: 'rocks' },
+      { distance: 70, depth: 8.5, bottom: 'silt' },
+      { distance: 100, depth: 6.0, bottom: 'rocks' },
+    ],
+    spots: [
+      { id: 'rocky_shelf', name: 'Каменная гряда', distance: 20, angle: -0.4, activityMultiplier: 1.1 },
+      { id: 'drop_off', name: 'Свал в глубину', distance: 50, angle: 0.1, activityMultiplier: 1.4 },
+      { id: 'deep_basin', name: 'Глубокая яма', distance: 70, angle: 0.5, activityMultiplier: 1.2 },
+    ],
+    fishSpeciesIds: ['perch', 'zander', 'pike', 'roach', 'bream'],
+    weatherProfile: ['clear', 'cloudy', 'fog'],
+    unlockLevel: 6,
+    travelCost: 800,
+    licensePerDay: 350,
+    maxAnglers: 8,
+  },
+  {
+    id: 'quiet_backwater',
+    name: 'Тихая старица',
+    description: 'Заросшая тихая заводь вдали от основного русла. Здесь ночует крупный сом и трофейный карп.',
+    backgroundImage: '/scenes/quiet_backwater.svg',
+    ambientSound: 'pond',
+    depthProfile: [
+      { distance: 0, depth: 0.5, bottom: 'grass' },
+      { distance: 10, depth: 1.5, bottom: 'silt' },
+      { distance: 20, depth: 3.0, bottom: 'silt' },
+      { distance: 35, depth: 5.5, bottom: 'snags' },
+      { distance: 50, depth: 7.5, bottom: 'silt' },
+      { distance: 65, depth: 9.0, bottom: 'snags' },
+    ],
+    spots: [
+      { id: 'lily_pads', name: 'Кувшинки', distance: 15, angle: -0.5, activityMultiplier: 1.0 },
+      { id: 'old_snags', name: 'Старый коряжник', distance: 35, angle: 0.2, activityMultiplier: 1.3 },
+      { id: 'night_pit', name: 'Ночная яма', distance: 60, angle: 0.4, activityMultiplier: 1.5 },
+    ],
+    fishSpeciesIds: ['tench', 'crucian', 'bream', 'catfish', 'carp'],
+    weatherProfile: ['clear', 'cloudy', 'rain', 'fog'],
+    unlockLevel: 12,
+    travelCost: 1600,
+    licensePerDay: 550,
+    maxAnglers: 6,
+  },
+]
+
+export function getLocationById(id: string): LocationDefinition | undefined {
+  return LOCATIONS.find((l) => l.id === id)
+}
