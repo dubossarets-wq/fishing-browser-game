@@ -67,18 +67,26 @@ interface ReelAnim {
 
 const REEL_ANIM_MS = 380
 
-// "Ивняк" (rod_float_basic) is rendered from a real photo instead of the
-// procedural stroke — handle/tip are its butt-cap and tip-guide positions
-// in the source image's own pixel space, used to align the photo between
-// the rod's anchor and its (angle/bend-driven) tip on screen.
+// "Ивняк" (rod_float_basic) is rendered from real photos instead of the
+// procedural stroke — a straight one for idle/waiting, and an already-bent
+// one for an actual bite/fight (its curve is baked into the photo, not
+// computed). handle/tip are each photo's own butt-cap and tip-guide pixel
+// positions, used to align it between the rod's anchor and its tip on screen.
 const IVNYAK_ROD_IMG = new Image()
 IVNYAK_ROD_IMG.src = '/rods/ivnyak.png'
 const IVNYAK_HANDLE = { x: 28, y: 1348 }
 const IVNYAK_TIP = { x: 385, y: 8 }
 
+const IVNYAK_BITE_ROD_IMG = new Image()
+IVNYAK_BITE_ROD_IMG.src = '/rods/ivnyak-bite.png'
+const IVNYAK_BITE_HANDLE = { x: 700, y: 2850 }
+const IVNYAK_BITE_TIP = { x: 1845, y: 285 }
+
 function drawRodPolePhoto(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
+  handle: { x: number; y: number },
+  tip: { x: number; y: number },
   anchorX: number,
   anchorY: number,
   tipX: number,
@@ -86,15 +94,15 @@ function drawRodPolePhoto(
 ) {
   const rodVecX = tipX - anchorX
   const rodVecY = tipY - anchorY
-  const imgVecX = IVNYAK_TIP.x - IVNYAK_HANDLE.x
-  const imgVecY = IVNYAK_TIP.y - IVNYAK_HANDLE.y
+  const imgVecX = tip.x - handle.x
+  const imgVecY = tip.y - handle.y
   const scale = Math.hypot(rodVecX, rodVecY) / Math.hypot(imgVecX, imgVecY)
   const rotation = Math.atan2(rodVecY, rodVecX) - Math.atan2(imgVecY, imgVecX)
   ctx.save()
   ctx.translate(anchorX, anchorY)
   ctx.rotate(rotation)
   ctx.scale(scale, scale)
-  ctx.drawImage(img, -IVNYAK_HANDLE.x, -IVNYAK_HANDLE.y)
+  ctx.drawImage(img, -handle.x, -handle.y)
   ctx.restore()
 }
 
@@ -636,8 +644,12 @@ function drawRod(
   const bend = rod.state === 'fight' ? Math.min(0.35, (rod.fight?.lineTension ?? 0) / 260) : rod.state === 'broken' ? 0.6 : 0.05
   const bentTipY = tipY + bend * 34
   const isIvnyak = rod.loadout.rod?.id === 'rod_float_basic'
-  if (isIvnyak && IVNYAK_ROD_IMG.complete && IVNYAK_ROD_IMG.naturalWidth > 0) {
-    drawRodPolePhoto(ctx, IVNYAK_ROD_IMG, anchorX, anchorY, tipX, bentTipY)
+  const isBiteOrFight = rod.biteStage === 'strong-bite' || rod.state === 'fight' || rod.state === 'hooked'
+  const ivnyakImg = isBiteOrFight ? IVNYAK_BITE_ROD_IMG : IVNYAK_ROD_IMG
+  const ivnyakHandle = isBiteOrFight ? IVNYAK_BITE_HANDLE : IVNYAK_HANDLE
+  const ivnyakTip = isBiteOrFight ? IVNYAK_BITE_TIP : IVNYAK_TIP
+  if (isIvnyak && ivnyakImg.complete && ivnyakImg.naturalWidth > 0) {
+    drawRodPolePhoto(ctx, ivnyakImg, ivnyakHandle, ivnyakTip, anchorX, anchorY, tipX, bentTipY)
   } else {
     ctx.strokeStyle = color
     ctx.lineWidth = 4
